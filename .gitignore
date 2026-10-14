@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+.idriftcheckco/
+*.log
+.DS_Store
