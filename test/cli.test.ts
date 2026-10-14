@@ -325,6 +325,25 @@ describe('replay -> diff -> report -> ci with a fake agent', () => {
   });
 });
 
+describe('record', () => {
+  it('flags an auth failure so `record` refuses to save it as a baseline', async () => {
+    repo = makeRepo(DEMO_FILES);
+    const fake = join(process.cwd(), 'test', 'fixtures', 'fake-agent-cli.mjs');
+    // The config can only name a binary, so drive the same code path through the runner directly.
+    const { ClaudeCodeRunner } = await import('../src/replay/claude-runner.js');
+    const { runReplay } = await import('../src/replay/replay.js');
+    const res = await runReplay({
+      repo: repo.dir, task: 't', baseDir: repo.dir, timeoutMs: 15_000,
+      arms: [{ name: 'recorded', variant: { name: 'recorded' }, runs: 1 }],
+      runner: new ClaudeCodeRunner({ bin: process.execPath, binArgs: [fake, 'auth-fail'] }),
+    });
+    const trace = res.arms['recorded']![0]!;
+    expect(trace.outcome.status).toBe('error');
+    expect(trace.notes.some((n) => n.startsWith('The agent CLI could not authenticate'))).toBe(true);
+    expect(existsSync(join(repo.dir, '.idriftcheckco', 'traces'))).toBe(false);
+  });
+});
+
 describe('demo', () => {
   it('runs the whole pipeline offline and finds the planted regression', async () => {
     const out = join(tmp, 'demo.html');

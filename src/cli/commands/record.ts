@@ -48,9 +48,9 @@ export async function recordCommand(ctx: Ctx, argv: string[]): Promise<number> {
   });
   const trace = res.arms['recorded']?.[0];
   if (!trace) throw new Error('The run did not complete. ' + res.notes.join(' '));
-  const path = await store.saveTrace(trace);
   const authNote = trace.notes.find((n) => n.startsWith('The agent CLI could not authenticate'));
-  if (authNote) ctx.stderr(`  ! ${authNote}`);
+  if (authNote) throw new Error(authNote + ' Nothing was saved.');
+  const path = await store.saveTrace(trace);
   ctx.stdout(`recorded ${trace.id.slice(0, 12)}  ${trace.outcome.status}  ${trace.filesChanged.length} file(s) changed`);
   ctx.stdout(`         → ${path}`);
   return 0;

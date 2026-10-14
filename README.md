@@ -199,9 +199,12 @@ export default defineConfig({
 - **Bash side effects are invisible in transcripts.** "Files changed" for *imported*
   sessions comes from edit tools; for *replays* it comes from `git diff` (ground truth).
 - **Cost figures are estimates** from a price table that you can override.
-- **The headless runner has been exercised with a scripted agent in CI but should be
-  smoke-tested once on your machine** with a tiny paid run (`record "say ok"`), since
-  the agent CLI's streaming output can change between versions.
+- **The live agent path is the least-tested part.** The runner is tested against a
+  stand-in agent process (task via stdin, stream parsing, auth failure, timeouts, process
+  cleanup), but not yet in CI against a real paid run, and the agent CLI's streaming
+  output can change between versions. Before trusting it, do one tiny paid run:
+  `idriftcheckco record "Reply ok" --yes --max-cost 0.05`. A login problem is reported
+  as such and never saved as a baseline.
 
 ## Development
 
