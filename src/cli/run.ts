@@ -14,6 +14,7 @@ import type { Store} from '../store/store.js';
 import { slug, type RunMeta } from '../store/store.js';
 import type { Trace, Variant } from '../trace/schema.js';
 import { fmtMetric } from '../util/format.js';
+import { preflightOrThrow } from './checks.js';
 import { UsageError, type Ctx } from './context.js';
 
 export interface ExecuteArgs {
@@ -62,6 +63,7 @@ export function makeRunner(kind: string, config: Config, scenarioPath: string | 
   if (kind !== 'claude') throw new UsageError(`Unknown --runner "${kind}". Use "claude" or "fake".`);
   return new ClaudeCodeRunner({
     bin: config.claudeBin,
+    binArgs: config.claudeArgs,
     permissionMode: config.permissionMode,
     envAllowlist: config.env,
     ...(config.prices ? { prices: config.prices } : {}),
@@ -100,6 +102,7 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
   const arms = control ? [control, a.candidate] : [a.candidate];
   const estimate = estimateReplay(source, arms, config.prices);
   ctx.stderr(describeEstimate(estimate, a.runner));
+  await preflightOrThrow(ctx, a.runner, a.dryRun);
   if (a.dryRun) {
     ctx.stderr(' Dry run: nothing was executed.');
     return { estimate };

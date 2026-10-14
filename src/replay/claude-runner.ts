@@ -4,7 +4,7 @@ import { clip, redactString } from '../redact/redact.js';
 import type { Price } from '../trace/pricing.js';
 import type { Trace } from '../trace/schema.js';
 import { killTree, spawnManaged } from './proc.js';
-import type { AgentRunner, RunRequest } from './runner.js';
+import type { AgentRunner, Check, RunRequest } from './runner.js';
 
 export interface ClaudeRunnerOptions {
   bin?: string;
@@ -26,6 +26,9 @@ const BASE_ENV = [
   'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'AWS_REGION', 'AWS_PROFILE',
 ];
 
+/** Credentials that authenticate the agent without an interactive login. */
+const CREDENTIAL_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'];
+
 export function buildEnv(source: NodeJS.ProcessEnv, extra: string[] = []): NodeJS.ProcessEnv {
   const allowed = new Set([...BASE_ENV, ...extra]);
   const out: NodeJS.ProcessEnv = {};
@@ -36,7 +39,7 @@ export function buildEnv(source: NodeJS.ProcessEnv, extra: string[] = []): NodeJ
 /** Args are validated, not escaped: a `.cmd` shim on Windows needs a shell, so refuse anything shell-active. */
 const SAFE_ARG = /^[A-Za-z0-9_@+=:,./\\ \-[\]]+$/;
 
-export function buildArgs(req: RunRequest, opts: { permissionMode: string; systemPromptText?: string }): string[] {
+export function buildArgs(req: RunRequest, opts: { permissionMode: string }): string[] {
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--permission-mode', opts.permissionMode];
   const v = req.variant;
   if (v.model) args.push('--model', v.model);
@@ -60,67 +63,122 @@ function quoteForShell(a: string): string {
   return /\s/.test(a) ? `"${a}"` : a;
 }
 
+interface Invocation {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+  timedOut: boolean;
+}
+
 /**
  * Drives the `claude` CLI headlessly (`-p --output-format stream-json`). The task is
- * written to stdin (no quoting hazards, no arg-length limits) and the stream is
- * parsed by the same adapter used for stored transcripts.
+ * written to stdin (no quoting hazards, no arg-length limits) and the stream is parsed
+ * by the same adapter used for stored transcripts.
  *
- * NOTE: the stream-json event shape is assumed to match transcript entries; this has
- * been verified for message/tool_use/tool_result shapes but should be re-checked with
- * a real paid run when the CLI version changes (see docs/replay-decision.md).
+ * Tested against a stand-in subprocess (stdin delivery, stream parsing, auth failure,
+ * timeouts). The live stream shape should be re-checked with one tiny paid run when the
+ * agent CLI version changes (see docs/replay-decision.md).
  */
 export class ClaudeCodeRunner implements AgentRunner {
   readonly id = 'claude-code';
   readonly paid = true;
   constructor(private readonly opts: ClaudeRunnerOptions = {}) {}
 
+  private get bin(): string {
+    return this.opts.bin ?? 'claude';
+  }
+
+  /** Spawn the CLI with an allow-listed env, optional stdin and a tree-killing timeout. */
+  private invoke(cliArgs: string[], o: { cwd: string; stdin?: string; timeoutMs: number; signal?: AbortSignal }): Promise<Invocation> {
+    const args = [...(this.opts.binArgs ?? []), ...cliArgs];
+    const env = buildEnv(this.opts.env ?? process.env, this.opts.envAllowlist);
+    const bin = this.bin;
+    return new Promise<Invocation>((resolveP, reject) => {
+      // With a shell, pass ONE command string: Node deprecates (DEP0190) shell + args array.
+      // Every generated arg was validated against SAFE_ARG, so concatenation is safe.
+      const child =
+        process.platform === 'win32'
+          ? spawnManaged([bin, ...args].map(quoteForShell).join(' '), [], { cwd: o.cwd, env, shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+          : spawnManaged(bin, args, { cwd: o.cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      let err = '';
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        killTree(child);
+      }, o.timeoutMs);
+      o.signal?.addEventListener('abort', () => killTree(child), { once: true });
+      child.stdout.on('data', (d: Buffer) => (out += d.toString('utf8')));
+      child.stderr.on('data', (d: Buffer) => (err = (err + d.toString('utf8')).slice(-4000)));
+      child.on('error', (e: NodeJS.ErrnoException) => {
+        clearTimeout(timer);
+        reject(e.code === 'ENOENT' ? new Error(`Could not start "${bin}". Install the agent CLI or set \`claudeBin\` in idriftcheckco.config.`) : e);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolveP({ stdout: out, stderr: err, code, timedOut });
+      });
+      child.stdin.on('error', () => undefined);
+      child.stdin.end(o.stdin ?? '');
+    });
+  }
+
+  /**
+   * Free, local checks that catch a run that is doomed before any money is spent:
+   * the CLI starts, and it is authenticated. Makes no model call.
+   */
+  async preflight(cwd: string): Promise<Check[]> {
+    const checks: Check[] = [];
+    let version: Invocation;
+    try {
+      version = await this.invoke(['--version'], { cwd, timeoutMs: 20_000 });
+    } catch (e) {
+      return [{ name: 'agent CLI', status: 'fail', detail: (e as Error).message, fix: 'Install the agent CLI, or set `claudeBin` in idriftcheckco.config.json.' }];
+    }
+    if (version.code !== 0) {
+      return [{
+        name: 'agent CLI', status: 'fail',
+        detail: `\`${this.bin} --version\` exited with ${version.code}: ${clip(redactString((version.stderr || version.stdout).trim()), 160)}`,
+        fix: 'Install the agent CLI, or set `claudeBin` in idriftcheckco.config.json.',
+      }];
+    }
+    checks.push({ name: 'agent CLI', status: 'ok', detail: clip(version.stdout.trim().split('\n')[0] ?? '', 80) });
+
+    const env = this.opts.env ?? process.env;
+    const credential = CREDENTIAL_ENV.find((k) => env[k]);
+    if (credential) {
+      checks.push({ name: 'agent auth', status: 'ok', detail: `credentials from ${credential}` });
+      return checks;
+    }
+    const auth = await this.invoke(['auth', 'status'], { cwd, timeoutMs: 20_000 }).catch(() => undefined);
+    let loggedIn: boolean | undefined;
+    try {
+      loggedIn = (JSON.parse(auth?.stdout ?? '') as { loggedIn?: unknown }).loggedIn === true;
+    } catch {
+      loggedIn = undefined;
+    }
+    if (loggedIn === true) checks.push({ name: 'agent auth', status: 'ok', detail: 'logged in' });
+    else if (loggedIn === false) {
+      checks.push({ name: 'agent auth', status: 'fail', detail: 'the agent CLI is not logged in', fix: 'Run `claude auth login`, or set ANTHROPIC_API_KEY.' });
+    } else {
+      checks.push({ name: 'agent auth', status: 'warn', detail: 'could not determine login state', fix: 'If runs fail to authenticate, run `claude auth login`.' });
+    }
+    return checks;
+  }
+
   async run(req: RunRequest): Promise<Trace> {
-    const bin = this.opts.bin ?? 'claude';
-    const args = [...(this.opts.binArgs ?? []), ...buildArgs(req, { permissionMode: this.opts.permissionMode ?? 'acceptEdits' })];
+    const cliArgs = buildArgs(req, { permissionMode: this.opts.permissionMode ?? 'acceptEdits' });
     if (req.variant.promptFile) {
       const text = await readFile(req.variant.promptFile, 'utf8').catch(() => {
         throw new Error(`Prompt file ${req.variant.promptFile} could not be read.`);
       });
-      // Passed via a temp-free route: inline arg would hit shell-quoting limits, so append to the task.
+      // An inline arg would hit shell-quoting and length limits, so append to the task on stdin.
       req = { ...req, task: `${req.task}\n\n<additional-instructions>\n${text}\n</additional-instructions>` };
     }
-    const env = buildEnv(this.opts.env ?? process.env, this.opts.envAllowlist);
-    const useShell = process.platform === 'win32';
     const started = Date.now();
-
-    const { stdout, stderr, code, timedOut } = await new Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean }>(
-      (resolveP, reject) => {
-        // With a shell, pass ONE command string: Node deprecates (DEP0190) shell + args array.
-        // Every arg was validated against SAFE_ARG, so concatenation is safe.
-        const child = useShell
-          ? spawnManaged([bin, ...args].map(quoteForShell).join(' '), [], { cwd: req.cwd, env, shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
-          : spawnManaged(bin, args, { cwd: req.cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-        let out = '';
-        let err = '';
-        let timedOutFlag = false;
-        const timer = setTimeout(() => {
-          timedOutFlag = true;
-          killTree(child);
-        }, req.timeoutMs);
-        req.signal?.addEventListener('abort', () => killTree(child), { once: true });
-        child.stdout.on('data', (d: Buffer) => (out += d.toString('utf8')));
-        child.stderr.on('data', (d: Buffer) => (err = (err + d.toString('utf8')).slice(-4000)));
-        child.on('error', (e: NodeJS.ErrnoException) => {
-          clearTimeout(timer);
-          reject(
-            e.code === 'ENOENT'
-              ? new Error(`Could not start "${bin}". Install the agent CLI or set \`claudeBin\` in idriftcheckco.config. `)
-              : e,
-          );
-        });
-        child.on('close', (c) => {
-          clearTimeout(timer);
-          resolveP({ stdout: out, stderr: err, code: c, timedOut: timedOutFlag });
-        });
-        child.stdin.on('error', () => undefined);
-        child.stdin.end(req.task);
-      },
-    );
+    const { stdout, stderr, code, timedOut } = await this.invoke(cliArgs, {
+      cwd: req.cwd, stdin: req.task, timeoutMs: req.timeoutMs, ...(req.signal ? { signal: req.signal } : {}),
+    });
 
     const trace = parseClaudeCodeSession(stdout, { ...(this.opts.prices ? { prices: this.opts.prices } : {}) });
     // The stream does not echo the prompt, so this adapter note is expected noise here.
@@ -130,9 +188,7 @@ export class ClaudeCodeRunner implements AgentRunner {
       const why = clip(redactString(stderr.trim() || trace.outcome.finalMessage || 'no output'), 300);
       notes.push(`Agent CLI exited with code ${code}: ${why}`);
     }
-    if (AUTH_FAILURE.test(`${stderr} ${trace.outcome.finalMessage ?? ''}`)) {
-      notes.push(AUTH_HINT);
-    }
+    if (AUTH_FAILURE.test(`${stderr} ${trace.outcome.finalMessage ?? ''}`)) notes.push(AUTH_HINT);
     const status = timedOut ? 'interrupted' : code !== 0 && trace.outcome.status !== 'completed' ? 'error' : trace.outcome.status;
     return {
       ...trace,

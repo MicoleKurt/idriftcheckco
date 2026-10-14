@@ -2,6 +2,7 @@ import { loadConfig } from '../../config.js';
 import { runReplay } from '../../replay/replay.js';
 import { Store } from '../../store/store.js';
 import { num, parse, UsageError, type Ctx } from '../context.js';
+import { preflightOrThrow } from '../checks.js';
 import { makeRunner } from '../run.js';
 
 export const RECORD_HELP = `idriftcheckco record "<task>"
@@ -35,6 +36,7 @@ export async function recordCommand(ctx: Ctx, argv: string[]): Promise<number> {
   const { config } = await loadConfig(ctx.cwd);
   const store = new Store(ctx.cwd, config.storeDir);
   const runner = makeRunner(values.runner, config, values.scenario, num(values.seed, 'seed'), ctx.cwd);
+  await preflightOrThrow(ctx, runner, false);
   if (runner.paid && !values.yes && !(await ctx.confirm('This makes a real agent run and spends API credit. Continue?'))) {
     throw new UsageError(ctx.interactive ? 'Cancelled.' : 'No terminal to confirm on. Re-run with --yes.');
   }

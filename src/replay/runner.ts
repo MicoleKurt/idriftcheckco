@@ -11,6 +11,15 @@ export interface RunRequest {
   signal?: AbortSignal;
 }
 
+/** Result of one environment check (used by `doctor` and the pre-flight before paid runs). */
+export interface Check {
+  name: string;
+  status: 'ok' | 'warn' | 'fail';
+  detail: string;
+  /** What to do about it. */
+  fix?: string;
+}
+
 /**
  * Anything that can attempt a task inside a directory and report what it did.
  * The real implementation drives an agent CLI; tests use a deterministic fake so
@@ -21,4 +30,6 @@ export interface AgentRunner {
   /** Whether a run costs real money (drives the confirmation prompt). */
   readonly paid: boolean;
   run(req: RunRequest): Promise<Trace>;
+  /** Free checks that a run can succeed at all (installed, authenticated). Optional. */
+  preflight?(cwd: string): Promise<Check[]>;
 }

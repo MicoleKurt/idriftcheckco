@@ -1,11 +1,23 @@
-// Stand-in for an agent CLI: reads the task from stdin, prints stream-json, exits.
-// Mode is the first argument: ok | auth-fail | hang.
+// Stand-in for an agent CLI. Mode is the first argument:
+//   ok | auth-fail | hang | logged-out | auth-garbage
+// Handles `--version` and `auth status` like the real CLI; otherwise reads the task from
+// stdin, prints stream-json and exits.
 import { readFileSync } from 'node:fs';
 
-const mode = process.argv[2];
-const task = readFileSync(0, 'utf8');
+const [mode, ...rest] = process.argv.slice(2);
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 
+if (rest.includes('--version')) {
+  process.stdout.write('9.9.9 (stand-in agent)\n');
+  process.exit(0);
+}
+if (rest[0] === 'auth' && rest[1] === 'status') {
+  if (mode === 'auth-garbage') process.stdout.write('not json at all\n');
+  else out({ loggedIn: mode !== 'logged-out', authMethod: mode === 'logged-out' ? 'none' : 'oauth' });
+  process.exit(0);
+}
+
+const task = readFileSync(0, 'utf8');
 if (mode === 'hang') {
   setInterval(() => undefined, 1000);
 } else if (mode === 'auth-fail') {

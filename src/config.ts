@@ -24,6 +24,8 @@ export const ConfigSchema = z
     softThreshold: z.number().gt(0).default(0.25),
     /** Agent CLI executable. */
     claudeBin: z.string().default('claude'),
+    /** Arguments placed before idriftcheckco's own, for wrappers (e.g. claudeBin "npx", claudeArgs ["claude"]). */
+    claudeArgs: z.array(z.string()).default([]),
     permissionMode: z.enum(['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan']).default('acceptEdits'),
     timeoutMinutes: z.number().positive().default(15),
     /** Hard spending cap per `replay`/`ci` invocation. */

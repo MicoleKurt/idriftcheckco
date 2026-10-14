@@ -5,6 +5,7 @@ import { VERSION } from '../version.js';
 import { ciCommand, CI_HELP } from './commands/ci.js';
 import { diffCommand, DIFF_HELP } from './commands/diff.js';
 import { importCommand, IMPORT_HELP } from './commands/import.js';
+import { doctorCommand, DOCTOR_HELP } from './commands/doctor.js';
 import { recordCommand, RECORD_HELP } from './commands/record.js';
 import { replayCommand, REPLAY_HELP } from './commands/replay.js';
 import { reportCommand, REPORT_HELP } from './commands/report.js';
@@ -20,6 +21,7 @@ Local-first: no telemetry; the only network traffic is your own agent's API call
 Usage
   idriftcheckco                          Find your sessions and rank them for replay
   idriftcheckco demo                     See a full regression report, offline, free
+  idriftcheckco doctor                   Check git, sessions, and that the agent CLI is installed and logged in
   idriftcheckco import [session...]      Save sessions as redacted traces
   idriftcheckco replay <trace> --model <id> [--runs 4] [--dry-run]
   idriftcheckco diff <a> [b]             Compare runs
@@ -56,11 +58,11 @@ async function demoCommand(ctx: Ctx, argv: string[]): Promise<number> {
 
 const COMMANDS: Record<string, (ctx: Ctx, argv: string[]) => Promise<number>> = {
   scan: scanCommand, import: importCommand, replay: replayCommand, diff: diffCommand,
-  report: reportCommand, ci: ciCommand, record: recordCommand, demo: demoCommand,
+  report: reportCommand, ci: ciCommand, record: recordCommand, demo: demoCommand, doctor: doctorCommand,
 };
 
 const HELPS: Record<string, string> = {
-  scan: SCAN_HELP, import: IMPORT_HELP, replay: REPLAY_HELP, diff: DIFF_HELP, report: REPORT_HELP, ci: CI_HELP, record: RECORD_HELP, demo: DEMO_HELP,
+  scan: SCAN_HELP, import: IMPORT_HELP, replay: REPLAY_HELP, diff: DIFF_HELP, report: REPORT_HELP, ci: CI_HELP, record: RECORD_HELP, demo: DEMO_HELP, doctor: DOCTOR_HELP,
 };
 
 export async function main(argv: string[], ctx: Ctx = realContext()): Promise<number> {

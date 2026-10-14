@@ -152,10 +152,31 @@ describe('import', () => {
 });
 
 describe('replay safety rails', () => {
-  async function imported(cwd: string) {
+  /** Import the fixture and point the real runner at the stand-in agent CLI (never the machine's). */
+  async function imported(cwd: string, agentMode = 'ok') {
+    const fake = join(process.cwd(), 'test', 'fixtures', 'fake-agent-cli.mjs');
+    writeFileSync(join(cwd, 'idriftcheckco.config.json'), JSON.stringify({ claudeBin: process.execPath, claudeArgs: [fake, agentMode] }));
     const c = makeCtx(cwd);
     await main(['import', 'sess-bas', '--sessions', sessionsFor(cwd)], c.ctx);
   }
+
+  it('stops a paid replay before spending when the agent is not logged in', async () => {
+    repo = makeRepo(DEMO_FILES);
+    await imported(repo.dir, 'logged-out');
+    const c = makeCtx(repo.dir);
+    expect(await main(['replay', 'sess-bas', '--model', 'claude-opus-5-5', '--yes'], c.ctx)).toBe(3);
+    expect(c.err()).toMatch(/Not starting: the agent CLI is not logged in\. Nothing was spent/);
+    expect(c.err()).toContain('claude auth login');
+    expect(existsSync(join(repo.dir, '.idriftcheckco', 'runs'))).toBe(false);
+  });
+
+  it('only warns about a logged-out agent in a dry run', async () => {
+    repo = makeRepo(DEMO_FILES);
+    await imported(repo.dir, 'logged-out');
+    const c = makeCtx(repo.dir);
+    expect(await main(['replay', 'sess-bas', '--model', 'claude-opus-5-5', '--dry-run'], c.ctx)).toBe(0);
+    expect(c.err()).toContain('a real run would fail');
+  });
 
   it('--dry-run prints an estimate and runs nothing', async () => {
     repo = makeRepo(DEMO_FILES);
