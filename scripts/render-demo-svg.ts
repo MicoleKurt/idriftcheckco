@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import type { Ctx } from '../src/cli/context.js';
 import { runDemo } from '../src/demo.js';
 import { renderTerminal } from '../src/report/terminal.js';
+import { stripAnsi } from '../src/util/format.js';
 
 const FG = '#e6edf3';
 const COLORS: Record<number, string> = { 31: '#ff7b72', 32: '#3fb950', 33: '#e3b341', 36: '#56d4dd', 90: '#8b949e' };
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
   while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();
 
   const command = '$ npx idriftcheckco demo';
-  const cols = Math.max(command.length, ...lines.map((l) => l.replace(/\u001b\[[0-9;]*m/g, '').length));
+  const cols = Math.max(command.length, ...lines.map((l) => stripAnsi(l).length));
   const width = Math.ceil(PAD_X * 2 + cols * CHAR);
   const height = TOP + (lines.length + 2) * LINE + 18;
   const typeStep = 0.045;
