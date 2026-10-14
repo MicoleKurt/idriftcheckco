@@ -7,6 +7,7 @@ import { renderTerminal } from '../../report/terminal.js';
 import { Store } from '../../store/store.js';
 import type { Variant } from '../../trace/schema.js';
 import { num, parse, UsageError, type Ctx } from '../context.js';
+import { resolveSourceTrace } from './import.js';
 import { executeReplay, makeRunner } from '../run.js';
 
 export const REPLAY_HELP = `idriftcheckco replay <trace> [change...]
@@ -93,7 +94,7 @@ export async function replayCommand(ctx: Ctx, argv: string[]): Promise<number> {
   if (positionals.length !== 1) throw new UsageError('Pass exactly one trace id or path, e.g. `idriftcheckco replay a1b2c3 --model <model>`. List traces with `scan` or `import`.');
   const { config } = await loadConfig(ctx.cwd);
   const store = new Store(ctx.cwd, config.storeDir);
-  const source = await store.resolveTrace(positionals[0]!);
+  const source = await resolveSourceTrace(ctx, config, store, positionals[0]!);
   const variant = variantFromFlags(ctx.cwd, values);
   const runs = num(values.runs, 'runs', 1) ?? config.runs;
   const runner = makeRunner(values.runner, config, values.scenario, num(values.seed, 'seed'), ctx.cwd);

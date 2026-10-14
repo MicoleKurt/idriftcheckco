@@ -1,0 +1,156 @@
+name: idriftcheckco
+description: Replay your recorded agent sessions under a new model, prompt or config, and fail the PR if behavior regresses.
+author: idriftcheckco contributors
+branding:
+  icon: activity
+  color: orange
+
+inputs:
+  model:
+    description: Model to test (the candidate). At least one of model, prompt-file, mcp-config or overlay is required.
+    required: false
+  prompt-file:
+    description: File with extra instructions to append to each task.
+    required: false
+  mcp-config:
+    description: MCP server config file to test.
+    required: false
+  overlay:
+    description: 'Files to copy into the replay worktree, one DEST=SRC per line (e.g. CLAUDE.md=./proposed/CLAUDE.md).'
+    required: false
+  runs:
+    description: Runs per side. Use 4 or more for statistically significant verdicts.
+    required: false
+    default: '4'
+  max-cost:
+    description: Spending cap in USD for the whole job. The job stops launching runs when reached.
+    required: false
+    default: '10'
+  check:
+    description: Command run after each attempt to verify the result (exit 0 = pass), e.g. "pnpm test".
+    required: false
+  fail-on:
+    description: 'Fail the job on "regression" (default) or on any "drift".'
+    required: false
+    default: regression
+  traces:
+    description: Comma-separated trace ids to replay. Default is the suite from the config, or all stored traces.
+    required: false
+  comment:
+    description: Post or update a pull request comment with the result.
+    required: false
+    default: 'true'
+  working-directory:
+    description: Repository directory containing .idriftcheckco/ traces.
+    required: false
+    default: .
+  version:
+    description: idriftcheckco version to run.
+    required: false
+    default: latest
+  node-version:
+    description: Node.js version.
+    required: false
+    default: '22'
+
+outputs:
+  verdict:
+    description: regression | likely-regression | drift | possible-drift | no-change
+    value: ${{ steps.run.outputs.verdict }}
+  exit-code:
+    description: 0 pass, 1 regression found, 2 bad invocation, 3 runtime failure.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Replay and diff
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs are passed through the environment, never interpolated into the script,
+      # so a malicious pull request cannot inject shell commands.
+      env:
+        IDC_MODEL: ${{ inputs.model }}
+        IDC_PROMPT_FILE: ${{ inputs.prompt-file }}
+        IDC_MCP_CONFIG: ${{ inputs.mcp-config }}
+        IDC_OVERLAY: ${{ inputs.overlay }}
+        IDC_RUNS: ${{ inputs.runs }}
+        IDC_MAX_COST: ${{ inputs.max-cost }}
+        IDC_CHECK: ${{ inputs.check }}
+        IDC_FAIL_ON: ${{ inputs.fail-on }}
+        IDC_TRACES: ${{ inputs.traces }}
+        IDC_VERSION: ${{ inputs.version }}
+      run: |
+        set +e
+        mkdir -p .idriftcheckco/out
+        args=(ci --runs "$IDC_RUNS" --max-cost "$IDC_MAX_COST" --fail-on "$IDC_FAIL_ON" --yes
+              --json-out .idriftcheckco/out/result.json
+              --md-out .idriftcheckco/out/comment.md
+              --badge-out .idriftcheckco/out/badge.json)
+        [ -n "$IDC_MODEL" ] && args+=(--model "$IDC_MODEL")
+        [ -n "$IDC_PROMPT_FILE" ] && args+=(--prompt-file "$IDC_PROMPT_FILE")
+        [ -n "$IDC_MCP_CONFIG" ] && args+=(--mcp-config "$IDC_MCP_CONFIG")
+        [ -n "$IDC_CHECK" ] && args+=(--check "$IDC_CHECK")
+        [ -n "$IDC_TRACES" ] && args+=(--traces "$IDC_TRACES")
+        while IFS= read -r line; do
+          [ -n "$line" ] && args+=(--overlay "$line")
+        done <<< "$IDC_OVERLAY"
+
+        npx --yes "idriftcheckco@${IDC_VERSION}" "${args[@]}"
+        code=$?
+
+        verdict=unknown
+        if [ -f .idriftcheckco/out/result.json ]; then
+          verdict=$(node -e "console.log(JSON.parse(require('fs').readFileSync('.idriftcheckco/out/result.json','utf8')).verdict)")
+        fi
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        if [ -f .idriftcheckco/out/comment.md ]; then
+          cat .idriftcheckco/out/comment.md >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit 0
+
+    - name: Comment on pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        IDC_DIR: ${{ inputs.working-directory }}
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const file = path.join(process.env.IDC_DIR, '.idriftcheckco/out/comment.md');
+          if (!fs.existsSync(file)) return;
+          const body = fs.readFileSync(file, 'utf8');
+          const marker = '<!-- idriftcheckco-report -->';
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+          const existing = comments.find((c) => c.body && c.body.includes(marker));
+          if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: idriftcheckco-reports
+        path: |
+          ${{ inputs.working-directory }}/.idriftcheckco/reports/
+          ${{ inputs.working-directory }}/.idriftcheckco/out/
+        if-no-files-found: ignore
+
+    - name: Enforce result
+      shell: bash
+      env:
+        IDC_EXIT: ${{ steps.run.outputs.exit-code }}
+      run: |
+        if [ "${IDC_EXIT:-3}" != "0" ]; then
+          echo "idriftcheckco exited with code ${IDC_EXIT:-3}"
+          exit "${IDC_EXIT:-3}"
+        fi

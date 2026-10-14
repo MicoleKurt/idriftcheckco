@@ -3,7 +3,7 @@ import { listSessionFiles, loadSession, sessionsRoot, type SessionFile } from '.
 import { parseClaudeCodeSession } from '../../adapters/claude-code.js';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { loadConfig } from '../../config.js';
+import { loadConfig, type Config } from '../../config.js';
 import { scanSessions } from '../../scan.js';
 import { Store } from '../../store/store.js';
 import type { Trace } from '../../trace/schema.js';
@@ -32,6 +32,31 @@ async function resolveSession(ref: string, root: string, project: string | undef
   if (hits.length === 0) throw new UsageError(`No session matches "${ref}". Run \`idriftcheckco scan\` to list session ids.`);
   if (hits.length > 1) throw new UsageError(`"${ref}" matches ${hits.length} sessions. Use more characters of the id.`);
   return hits[0]!;
+}
+
+/**
+ * Resolve a trace for `replay`: a stored trace first, otherwise import the matching
+ * session on the fly so a first-time user does not need a separate `import` step.
+ */
+export async function resolveSourceTrace(ctx: Ctx, config: Config, store: Store, ref: string): Promise<Trace> {
+  try {
+    return await store.resolveTrace(ref);
+  } catch (notStored) {
+    const root = sessionsRoot(config.sessionsDir, ctx.env);
+    let file: SessionFile;
+    try {
+      file = await resolveSession(ref, root, ctx.cwd);
+    } catch {
+      throw notStored;
+    }
+    const trace =
+      file.project === ''
+        ? parseClaudeCodeSession(await readFile(file.path, 'utf8'), { sessionId: file.sessionId })
+        : await loadSession(file, config.prices);
+    await store.saveTrace(trace);
+    ctx.stderr(`Imported session ${trace.id.slice(0, 8)} into ${store.tracesDir}`);
+    return trace;
+  }
 }
 
 export async function importCommand(ctx: Ctx, argv: string[]): Promise<number> {

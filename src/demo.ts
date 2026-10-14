@@ -56,7 +56,7 @@ export const DEMO_SCENARIO = parseScenario({
   ],
 });
 
-function demoSource(): Trace {
+export function demoSource(): Trace {
   return buildTrace({
     id: 'demo-session',
     source: { kind: 'fake', adapter: 'demo@1' },

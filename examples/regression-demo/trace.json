@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "demo-session",
+  "source": {
+    "kind": "fake",
+    "adapter": "demo@1"
+  },
+  "task": "Fix slugify so it trims whitespace and collapses repeated spaces, then make sure the tests pass.",
+  "humanTurns": 1,
+  "model": "claude-opus-4-8",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "endedAt": "2026-01-01T00:00:40.000Z",
+  "durationMs": 40000,
+  "steps": [],
+  "usage": {
+    "inputTokens": 40000,
+    "outputTokens": 1500,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0
+  },
+  "costUsd": 0.2375,
+  "costSource": "estimated",
+  "filesChanged": [],
+  "filesRead": [],
+  "outcome": {
+    "status": "completed"
+  },
+  "notes": []
+}

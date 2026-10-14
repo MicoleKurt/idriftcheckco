@@ -29,6 +29,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.map",
     "README.md",
     "LICENSE"
   ],
@@ -39,7 +40,8 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "prepublishOnly": "pnpm check && pnpm build"
   },
   "dependencies": {
     "zod": "^4.6.7"
@@ -52,5 +54,14 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.4"
+  },
+  "packageManager": "pnpm@12.10.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MicoleKurt/idriftcheckco.git"
+  },
+  "homepage": "https://github.com/MicoleKurt/idriftcheckco#readme",
+  "bugs": {
+    "url": "https://github.com/MicoleKurt/idriftcheckco/issues"
   }
 }

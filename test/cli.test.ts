@@ -185,6 +185,15 @@ describe('replay safety rails', () => {
     expect(c.err()).toMatch(/exceeds --max-cost/);
   });
 
+  it('imports the session on the fly when it has not been imported yet', async () => {
+    repo = makeRepo(DEMO_FILES);
+    const c = makeCtx(repo.dir, { env: { CLAUDE_CONFIG_DIR: sessionsFor(repo.dir) } });
+    expect(await main(['replay', 'sess-bas', '--model', 'claude-opus-5-5', '--dry-run'], c.ctx)).toBe(0);
+    expect(c.err()).toContain('Imported session');
+    expect(c.err()).toContain('Replay plan');
+    expect(existsSync(join(repo.dir, '.idriftcheckco', 'traces', 'sess-basic-0001.json'))).toBe(true);
+  });
+
   it('requires something to change', async () => {
     repo = makeRepo(DEMO_FILES);
     await imported(repo.dir);

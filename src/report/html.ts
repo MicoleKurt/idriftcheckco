@@ -28,6 +28,7 @@ const CSS = `
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+code{background:var(--bg);border:1px solid var(--line);padding:0 5px;border-radius:5px}
 code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
 header.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:20px;color:var(--mute);font-size:13px}
 .brand{font-weight:700;letter-spacing:-.01em;color:var(--ink);font-size:15px}
@@ -94,6 +95,11 @@ footer p{margin:6px 0}
 @media print{body{background:#fff}.card,.hero{box-shadow:none;border:1px solid var(--line)}}
 `;
 
+/** Escape, then turn `code` spans into <code> (escaping first keeps this injection-safe). */
+function rich(text: string): string {
+  return esc(text).replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
 function glyph(f: Finding): { cls: string; ch: string } {
   if (f.severity === 'hard') return { cls: `hard ${f.evidence === 'weak' ? 'weak' : ''}`, ch: '✖' };
   if (f.kind === 'verification-dropped') return { cls: 'warn', ch: '!' };
@@ -104,9 +110,9 @@ function glyph(f: Finding): { cls: string; ch: string } {
 
 function findingHtml(f: Finding): string {
   const g = glyph(f);
-  return `<div class="finding"><div class="ico ${g.cls}">${g.ch}</div><div><h3>${esc(f.title)}${
+  return `<div class="finding"><div class="ico ${g.cls}">${g.ch}</div><div><h3>${rich(f.title)}${
     f.evidence === 'weak' ? '<span class="tag weak">unconfirmed</span>' : '<span class="tag">confirmed</span>'
-  }</h3><p>${esc(f.detail)}</p></div></div>`;
+  }</h3><p>${rich(f.detail)}</p></div></div>`;
 }
 
 function stripPlot(m: MetricComparison): string {
@@ -230,7 +236,7 @@ export function renderHtml(report: DiffReport, opts: HtmlOptions): string {
 <header class="top"><span class="brand">idrift<i>check</i>co</span><span>behavior diff report</span></header>
 <div class="hero">
   <span class="pill">${esc(VERDICT_LABEL[report.verdict])}</span>
-  <h1>${esc(headline(report))}</h1>
+  <h1>${rich(headline(report))}</h1>
   <p>${esc(VERDICT_BLURB[report.verdict])}</p>
   <div class="arms">${arm(report.baseline, 'b')}<span class="arrow">→</span>${arm(report.candidate, 'c')}</div>
 </div>

@@ -85,3 +85,13 @@ describe('version', () => {
     expect(VERSION).toBe(pkg.version);
   });
 });
+
+describe('code spans in findings', () => {
+  it('renders `code` as <code> but still escapes its contents', () => {
+    const baseline = many(4, { calls: [['Bash', 'npm run test<img>']] });
+    const candidate = many(4, { calls: [['Bash', 'ls']] });
+    const html = renderHtml(diffGroups(baseline, candidate), { baseline, candidate });
+    expect(html).not.toContain('<img>');
+    expect(html).toContain('<code>npm run test&lt;img&gt;</code>');
+  });
+});
