@@ -4,3 +4,4 @@ coverage/
 .idriftcheckco/
 *.log
 .DS_Store
+.tmp/

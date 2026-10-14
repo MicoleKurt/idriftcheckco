@@ -116,19 +116,18 @@ export function diffGroups(baseline: Trace[], candidate: Trace[], options: DiffO
     const diff = rate(b, nB) - rate(c, nC);
     const evidence = proportionEvidence(p, diff, alpha);
     if (!evidence) continue;
-    const counts = `${b}/${nB} → ${c}/${nC}`;
     if (diff > 0) {
       findings.push({
         id: `file-missing:${path}`, kind: 'file-missing', severity: 'hard', evidence, direction: 'worse',
         title: `No longer changes ${path}`,
-        detail: `The baseline changed this file in ${b}/${nB} runs; the candidate in ${c}/${nC} (${counts})${fmtP(p)}.`,
+        detail: `The baseline changed this file in ${b}/${nB} runs; the candidate in ${c}/${nC}${fmtP(p)}.`,
         ...(p !== null ? { p } : {}),
       });
     } else {
       findings.push({
         id: `file-unexpected:${path}`, kind: 'file-unexpected', severity: 'hard', evidence, direction: 'worse',
         title: `Now changes ${path}`,
-        detail: `The baseline changed this file in ${b}/${nB} runs; the candidate in ${c}/${nC} (${counts})${fmtP(p)}.`,
+        detail: `The baseline changed this file in ${b}/${nB} runs; the candidate in ${c}/${nC}${fmtP(p)}.`,
         ...(p !== null ? { p } : {}),
       });
     }
