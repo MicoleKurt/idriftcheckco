@@ -11,36 +11,31 @@ behavior: files touched, checks passed, tool sequence, steps, cost. With varianc
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-339933)
 
-<img src="docs/assets/report.png" alt="idriftcheckco HTML report showing a regression between two models" width="760">
+<img src="docs/assets/demo.svg" alt="Terminal: npx idriftcheckco demo reports a REGRESSION, a failing check, a dropped test run and a 127% cost increase" width="720">
+
+**[See a live example report →](https://micolekurt.github.io/idriftcheckco/demo/)**
 
 </div>
 
 ## Try it in three commands
 
 ```bash
-npx idriftcheckco demo                                          # 10 seconds, offline, free: see a real report
-npx idriftcheckco                                               # finds YOUR sessions, ranks them for replay
-npx idriftcheckco replay <session> --model <new-model> --dry-run   # shows the cost before you spend a cent
+npx github:MicoleKurt/idriftcheckco demo        # ~30 s first run, offline, free: see a real report
+npx github:MicoleKurt/idriftcheckco             # finds YOUR sessions, ranks them for replay
+npx github:MicoleKurt/idriftcheckco replay <session> --model <new-model> --dry-run   # cost first
 ```
+
+> The npm release is pending; until then, run straight from GitHub as above. Once it is
+> published, `npx idriftcheckco <command>` does the same.
 
 No dataset to write, no config file, no account. It reads sessions you already have.
+Before any paid run, `idriftcheckco doctor` (and every `replay`, automatically) checks
+that the agent CLI is installed and logged in, so nothing is spent on runs that would fail.
 
-```text
- idriftcheckco  control [claude-opus-4-8] (4 runs) ▸ opus-5-5 [claude-opus-5-5] (4 runs)
+The terminal above is the real output of `demo`: a scripted agent replayed through the
+genuine worktree, git-diff and statistics pipeline. The same run produces this report:
 
-  REGRESSION   The candidate behaves measurably worse. Do not ship without a look.
-
- HARD what the agent produced
-  ✖ `node test.mjs` fails more often
-      Passes in 0/4 candidate runs versus 4/4 baseline runs (p=0.029).
-
- SOFT how it got there
-  ▲ Cost +127%                        $0.218 → $0.493   (p=0.029)
-  ⚠ Stops running `node test.mjs`     present in 4/4 baseline runs, 0/4 candidate runs
-```
-
-That output is real (`idriftcheckco demo` produces it from a scripted agent that goes
-through the genuine worktree, git-diff and statistics pipeline).
+<p align="center"><a href="https://micolekurt.github.io/idriftcheckco/demo/"><img src="docs/assets/report.png" alt="idriftcheckco HTML report showing a regression between two models" width="760"></a></p>
 
 ## Why
 
@@ -119,7 +114,7 @@ asked to confirm; in CI you must pass `--yes`. What you can change:
 | `--mcp-config <f>` | A different MCP server set |
 
 Everything else: `idriftcheckco <command> --help`. Commands: `scan` (default), `import`,
-`replay`, `diff`, `report`, `ci`, `record`, `demo`.
+`replay`, `diff`, `report`, `ci`, `record`, `demo`, `doctor`.
 
 ## Use it in CI
 
