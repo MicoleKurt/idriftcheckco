@@ -72,6 +72,8 @@ export const VariantSchema = z.object({
   promptFile: z.string().optional(),
   mcpConfig: z.string().optional(),
   extraArgs: z.array(z.string()).optional(),
+  /** Files copied into the replay worktree before the run: destination -> source path (e.g. CLAUDE.md). */
+  files: z.record(z.string(), z.string()).optional(),
 });
 export type Variant = z.infer<typeof VariantSchema>;
 
