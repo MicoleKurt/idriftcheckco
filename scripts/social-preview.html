@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>idriftcheckco social preview</title>
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1280px;height:640px;background:#0b0f14;overflow:hidden}
+  body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e8ecf1;position:relative}
+  .glow{position:absolute;inset:0;background:radial-gradient(900px 500px at 85% 20%,rgba(240,138,36,.22),transparent 60%),radial-gradient(700px 500px at 10% 100%,rgba(79,124,255,.20),transparent 60%)}
+  .wrap{position:relative;padding:72px 80px;display:grid;grid-template-columns:1.08fr .92fr;gap:56px;height:100%;align-items:center}
+  .brand{font-weight:800;font-size:30px;letter-spacing:-.01em}
+  .brand i{font-style:normal;color:#f08a24}
+  h1{font-size:58px;line-height:1.06;letter-spacing:-.03em;margin:22px 0 22px;font-weight:800}
+  h1 em{font-style:normal;color:#f08a24}
+  p{font-size:23px;line-height:1.45;color:#a3afbf;max-width:30ch}
+  .cmd{margin-top:34px;display:inline-block;font:600 21px ui-monospace,Consolas,monospace;background:#151a21;border:1px solid #2a323d;border-radius:12px;padding:14px 20px;color:#e8ecf1}
+  .cmd b{color:#3fb950}
+  .card{background:#151a21;border:1px solid #2a323d;border-radius:20px;padding:28px;box-shadow:0 30px 80px rgba(0,0,0,.45);border-left:7px solid #ff6b73}
+  .pill{display:inline-block;background:#ff6b73;color:#0b0f14;font:800 15px/1 system-ui;letter-spacing:.08em;padding:7px 12px;border-radius:999px}
+  .card h2{font-size:25px;margin:16px 0 18px;letter-spacing:-.01em}
+  .row{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid #222a33;font-size:18px;color:#c9d2dd}
+  .ico{flex:none;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font:800 13px system-ui;color:#0b0f14}
+  .r{background:#ff6b73}.y{background:#f0b44c}
+  .row small{display:block;color:#7d8a9a;font-size:15px;margin-top:2px}
+  .arms{display:flex;gap:10px;margin-top:6px;font:500 15px ui-monospace,Consolas,monospace;color:#93a0b0}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+</style></head>
+<body><div class="glow"></div>
+<div class="wrap">
+  <div>
+    <div class="brand">idrift<i>check</i>co</div>
+    <h1>Upgrade your model<br>without <em>silently</em><br>breaking your agent.</h1>
+    <p>Replays the agent sessions you already have under a new model or prompt, and diffs what changed, with statistics instead of vibes.</p>
+    <div class="cmd"><b>$</b> npx idriftcheckco demo</div>
+  </div>
+  <div class="card">
+    <span class="pill">REGRESSION</span>
+    <h2>Tests fail 4/4 runs and the agent stopped running them</h2>
+    <div class="row"><div class="ico r">✖</div><div><code>node test.mjs</code> fails more often<small>0/4 vs 4/4 runs · p = 0.029</small></div></div>
+    <div class="row"><div class="ico y">!</div><div>Stops running the test suite<small>dropped in every candidate run</small></div></div>
+    <div class="row"><div class="ico y">▲</div><div>Cost +127%<small>$0.22 → $0.49 per task · p = 0.029</small></div></div>
+    <div class="arms"><span><span class="dot" style="background:#4f7cff"></span>old model × 4</span><span>→</span><span><span class="dot" style="background:#f08a24"></span>new model × 4</span></div>
+  </div>
+</div>
+</body></html>

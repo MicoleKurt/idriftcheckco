@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>idriftcheckco: control vs opus-5-5</title>
+<meta name="color-scheme" content="light dark">
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--ink:#14171c;--mute:#5d6673;--line:#e3e6ea;
+  --base:#4f7cff;--cand:#f08a24;--red:#d6303a;--amber:#b7791f;--green:#1f9d55;--cyan:#0e7490;
+  --accent:var(--green);--accent-bg:#e8f6ee;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d1014;--card:#151a20;--ink:#e8ecf1;--mute:#93a0b0;--line:#252d37;
+  --base:#7b9cff;--cand:#ffa84a;--red:#ff6b73;--amber:#f0b44c;--green:#4cd08a;--cyan:#5cc8e0;
+  --accent-bg:#17222b;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+code{background:var(--bg);border:1px solid var(--line);padding:0 5px;border-radius:5px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
+header.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:20px;color:var(--mute);font-size:13px}
+.brand{font-weight:700;letter-spacing:-.01em;color:var(--ink);font-size:15px}
+.brand i{font-style:normal;color:var(--cand)}
+.hero{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:28px 28px 24px;border-left:6px solid var(--accent);position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,var(--accent-bg),transparent 55%);opacity:.7;pointer-events:none}
+.hero>*{position:relative;z-index:1}
+.pill{display:inline-block;font-weight:800;letter-spacing:.08em;font-size:12px;padding:4px 10px;border-radius:999px;color:#fff;background:var(--accent)}
+.hero h1{margin:12px 0 6px;font-size:30px;line-height:1.2;letter-spacing:-.02em}
+.hero p{margin:0;color:var(--mute);max-width:62ch}
+.arms{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.arm{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:13px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot.b{background:var(--base)}.dot.c{background:var(--cand)}
+.arrow{align-self:center;color:var(--mute)}
+.v-regression,.v-likely-regression{--accent:var(--red);--accent-bg:rgba(214,48,58,.10)}
+.v-drift,.v-possible-drift{--accent:var(--amber);--accent-bg:rgba(183,121,31,.12)}
+.v-no-change{--accent:var(--green);--accent-bg:rgba(31,157,85,.10)}
+section{margin-top:28px}
+h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:700}
+h2 small{text-transform:none;letter-spacing:0;font-weight:400;margin-left:6px}
+.card{background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.finding{display:flex;gap:14px;padding:14px 18px;border-top:1px solid var(--line)}
+.finding:first-child{border-top:0}
+.ico{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff;margin-top:1px}
+.ico.hard{background:var(--red)}.ico.hard.weak{background:var(--amber)}
+.ico.warn{background:var(--amber)}.ico.up{background:var(--amber)}.ico.down{background:var(--green)}.ico.neutral{background:var(--cyan)}
+.finding h3{margin:0;font-size:15px}
+.finding p{margin:2px 0 0;color:var(--mute);font-size:13.5px}
+.tag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--mute);margin-left:8px;vertical-align:1px}
+.tag.weak{color:var(--amber);border-color:var(--amber)}
+.empty{padding:18px;color:var(--mute)}
+.metric{display:grid;grid-template-columns:130px 1fr 150px;gap:14px;align-items:center;padding:12px 18px;border-top:1px solid var(--line)}
+.metric:first-child{border-top:0}
+.metric .name{font-weight:600}
+.metric .vals{font-size:12.5px;color:var(--mute)}
+.metric .chg{text-align:right;font-variant-numeric:tabular-nums}
+.chg b{font-size:16px}.chg small{display:block;color:var(--mute)}
+.up-c{color:var(--amber)}.down-c{color:var(--green)}
+svg.strip{width:100%;height:46px;display:block}
+.axis{stroke:var(--line);stroke-width:1}
+.tick-b{stroke:var(--base);stroke-width:2}.tick-c{stroke:var(--cand);stroke-width:2}
+.pt-b{fill:var(--base);fill-opacity:.8}.pt-c{fill:var(--cand);fill-opacity:.8}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);text-align:left;padding:10px 18px;font-weight:700}
+td{padding:9px 18px;border-top:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar{display:inline-block;height:8px;border-radius:4px;vertical-align:middle;min-width:2px}
+.bar.b{background:var(--base)}.bar.c{background:var(--cand)}
+.rate{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mute)}
+.tl{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.tl .h{padding:10px 18px;font-size:12px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;display:flex;gap:8px;align-items:center}
+.tl .cell{padding:5px 18px;border-top:1px dashed var(--line);min-height:34px;display:flex;align-items:center}
+.chip{display:inline-block;padding:3px 9px;border-radius:7px;border:1px solid var(--line);font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.same{background:var(--bg)}
+.chip.removed{background:rgba(214,48,58,.12);border-color:var(--red);color:var(--red);text-decoration:line-through}
+.chip.added{background:rgba(79,124,255,.12);border-color:var(--base)}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--mute);font-size:13px;padding:6px 0}
+.note{margin:6px 0;color:var(--mute);font-size:13px}
+footer{margin-top:36px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px}
+footer p{margin:6px 0}
+@media (max-width:700px){.metric{grid-template-columns:1fr}.metric .chg{text-align:left}.tl{grid-template-columns:1fr}.hero h1{font-size:24px}}
+@media print{body{background:#fff}.card,.hero{box-shadow:none;border:1px solid var(--line)}}
+</style></head>
+<body><div class="wrap v-regression">
+<header class="top"><span class="brand">idrift<i>check</i>co</span><span>behavior diff report</span></header>
+<div class="hero">
+  <span class="pill">REGRESSION</span>
+  <h1><code>node test.mjs</code> fails more often and 2 more hard differences</h1>
+  <p>The candidate behaves measurably worse. Do not ship without a look.</p>
+  <div class="arms"><span class="arm"><span class="dot b"></span><b>control</b> <span class="mono">claude-opus-4-8</span> · 4 runs</span><span class="arrow">→</span><span class="arm"><span class="dot c"></span><b>opus-5-5</b> <span class="mono">claude-opus-5-5</span> · 4 runs</span></div>
+</div>
+
+<section><h2>Hard differences <small>what the agent produced</small></h2><div class="card"><div class="finding"><div class="ico hard ">✖</div><div><h3><code>node test.mjs</code> fails more often<span class="tag">confirmed</span></h3><p>Passes in 0/4 candidate runs versus 4/4 baseline runs (p=0.029).</p></div></div><div class="finding"><div class="ico hard weak">✖</div><div><h3>No longer changes src/slugify.js<span class="tag weak">unconfirmed</span></h3><p>The baseline changed this file in 4/4 runs; the candidate in 2/4 (p=0.429).</p></div></div><div class="finding"><div class="ico hard weak">✖</div><div><h3>Now changes README.md<span class="tag weak">unconfirmed</span></h3><p>The baseline changed this file in 0/4 runs; the candidate in 2/4 (p=0.429).</p></div></div></div></section>
+
+<section><h2>Soft drift <small>how it got there</small></h2><div class="card"><div class="finding"><div class="ico up">▲</div><div><h3>Cost +127%<span class="tag">confirmed</span></h3><p>$0.218 → $0.493 (mean of 4 vs 4 runs) (p=0.029).</p></div></div><div class="finding"><div class="ico up">▲</div><div><h3>Duration +92%<span class="tag">confirmed</span></h3><p>37.2s → 1.2m (mean of 4 vs 4 runs) (p=0.029).</p></div></div><div class="finding"><div class="ico neutral">●</div><div><h3>Tool calls -37%<span class="tag">confirmed</span></h3><p>4 → 2.5 (mean of 4 vs 4 runs) (p=0.029).</p></div></div><div class="finding"><div class="ico up">▲</div><div><h3>Tokens +118%<span class="tag">confirmed</span></h3><p>42.0k → 91.4k (mean of 4 vs 4 runs) (p=0.029).</p></div></div><div class="finding"><div class="ico warn">!</div><div><h3>Stops running <code>node test.mjs</code><span class="tag">confirmed</span></h3><p>Verification step present in 4/4 baseline runs but 0/4 candidate runs (p=0.029). Bugs can now ship unnoticed.</p></div></div><div class="finding"><div class="ico neutral">●</div><div><h3>Different order of work<span class="tag weak">unconfirmed</span></h3><p>Step-sequence similarity is 33% versus 100% between baseline runs (the noise floor). Heuristic, not a significance test.</p></div></div></div></section>
+
+<section><h2>Metrics <small><span class="dot b"></span> baseline <span class="dot c"></span> candidate · each dot is one run</small></h2><div class="card"><div class="metric"><div><div class="name">Tool calls</div><div class="vals"><span class="dot b"></span> 4<br><span class="dot c"></span> 2.5 ±0.6</div></div><svg class="strip" viewBox="0 0 420 46" role="img" aria-label="Tool calls distribution"><line class="axis" x1="14" x2="406" y1="23" y2="23"/><line class="tick-b" x1="406.0" x2="406.0" y1="5" y2="23"/><line class="tick-c" x1="112.0" x2="112.0" y1="25" y2="43"/><circle class="pt-b" cx="406.0" cy="14" r="5"><title>baseline: 4</title></circle><circle class="pt-b" cx="406.0" cy="14" r="5"><title>baseline: 4</title></circle><circle class="pt-b" cx="406.0" cy="14" r="5"><title>baseline: 4</title></circle><circle class="pt-b" cx="406.0" cy="14" r="5"><title>baseline: 4</title></circle><circle class="pt-c" cx="14.0" cy="34" r="5"><title>candidate: 2</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 3</title></circle><circle class="pt-c" cx="14.0" cy="34" r="5"><title>candidate: 2</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 3</title></circle></svg><div class="chg down-c"><b>-37%</b><small>p = 0.029</small></div></div><div class="metric"><div><div class="name">Cost</div><div class="vals"><span class="dot b"></span> $0.218 ±$0.007<br><span class="dot c"></span> $0.493 ±$0.026</div></div><svg class="strip" viewBox="0 0 420 46" role="img" aria-label="Cost distribution"><line class="axis" x1="14" x2="406" y1="23" y2="23"/><line class="tick-b" x1="20.9" x2="20.9" y1="5" y2="23"/><line class="tick-c" x1="360.5" x2="360.5" y1="25" y2="43"/><circle class="pt-b" cx="18.3" cy="14" r="5"><title>baseline: $0.215</title></circle><circle class="pt-b" cx="14.0" cy="14" r="5"><title>baseline: $0.212</title></circle><circle class="pt-b" cx="18.3" cy="14" r="5"><title>baseline: $0.215</title></circle><circle class="pt-b" cx="33.0" cy="14" r="5"><title>baseline: $0.227</title></circle><circle class="pt-c" cx="344.8" cy="34" r="5"><title>candidate: $0.480</title></circle><circle class="pt-c" cx="359.7" cy="34" r="5"><title>candidate: $0.492</title></circle><circle class="pt-c" cx="331.4" cy="34" r="5"><title>candidate: $0.469</title></circle><circle class="pt-c" cx="406.0" cy="34" r="5"><title>candidate: $0.530</title></circle></svg><div class="chg up-c"><b>+127%</b><small>p = 0.029</small></div></div><div class="metric"><div><div class="name">Tokens</div><div class="vals"><span class="dot b"></span> 42.0k ±1.7k<br><span class="dot c"></span> 91.4k ±5.8k</div></div><svg class="strip" viewBox="0 0 420 46" role="img" aria-label="Tokens distribution"><line class="axis" x1="14" x2="406" y1="23" y2="23"/><line class="tick-b" x1="21.8" x2="21.8" y1="5" y2="23"/><line class="tick-c" x1="353.6" x2="353.6" y1="25" y2="43"/><circle class="pt-b" cx="17.3" cy="14" r="5"><title>baseline: 41.3k</title></circle><circle class="pt-b" cx="38.5" cy="14" r="5"><title>baseline: 44.5k</title></circle><circle class="pt-b" cx="17.3" cy="14" r="5"><title>baseline: 41.3k</title></circle><circle class="pt-b" cx="14.0" cy="14" r="5"><title>baseline: 40.8k</title></circle><circle class="pt-c" cx="354.6" cy="34" r="5"><title>candidate: 91.6k</title></circle><circle class="pt-c" cx="340.7" cy="34" r="5"><title>candidate: 89.5k</title></circle><circle class="pt-c" cx="313.1" cy="34" r="5"><title>candidate: 85.4k</title></circle><circle class="pt-c" cx="406.0" cy="34" r="5"><title>candidate: 99.3k</title></circle></svg><div class="chg up-c"><b>+118%</b><small>p = 0.029</small></div></div><div class="metric"><div><div class="name">Duration</div><div class="vals"><span class="dot b"></span> 37.2s ±2.1s<br><span class="dot c"></span> 1.2m ±2.2s</div></div><svg class="strip" viewBox="0 0 420 46" role="img" aria-label="Duration distribution"><line class="axis" x1="14" x2="406" y1="23" y2="23"/><line class="tick-b" x1="43.8" x2="43.8" y1="5" y2="23"/><line class="tick-c" x1="384.2" x2="384.2" y1="25" y2="43"/><circle class="pt-b" cx="53.2" cy="14" r="5"><title>baseline: 38.1s</title></circle><circle class="pt-b" cx="60.4" cy="14" r="5"><title>baseline: 38.8s</title></circle><circle class="pt-b" cx="14.0" cy="14" r="5"><title>baseline: 34.2s</title></circle><circle class="pt-b" cx="47.7" cy="14" r="5"><title>baseline: 37.5s</title></circle><circle class="pt-c" cx="367.6" cy="34" r="5"><title>candidate: 1.2m</title></circle><circle class="pt-c" cx="406.0" cy="34" r="5"><title>candidate: 1.2m</title></circle><circle class="pt-c" cx="363.5" cy="34" r="5"><title>candidate: 1.2m</title></circle><circle class="pt-c" cx="399.6" cy="34" r="5"><title>candidate: 1.2m</title></circle></svg><div class="chg up-c"><b>+92%</b><small>p = 0.029</small></div></div><div class="metric"><div><div class="name">Tool errors</div><div class="vals"><span class="dot b"></span> 0<br><span class="dot c"></span> 0</div></div><svg class="strip" viewBox="0 0 420 46" role="img" aria-label="Tool errors distribution"><line class="axis" x1="14" x2="406" y1="23" y2="23"/><line class="tick-b" x1="210.0" x2="210.0" y1="5" y2="23"/><line class="tick-c" x1="210.0" x2="210.0" y1="25" y2="43"/><circle class="pt-b" cx="210.0" cy="14" r="5"><title>baseline: 0</title></circle><circle class="pt-b" cx="210.0" cy="14" r="5"><title>baseline: 0</title></circle><circle class="pt-b" cx="210.0" cy="14" r="5"><title>baseline: 0</title></circle><circle class="pt-b" cx="210.0" cy="14" r="5"><title>baseline: 0</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 0</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 0</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 0</title></circle><circle class="pt-c" cx="210.0" cy="34" r="5"><title>candidate: 0</title></circle></svg><div class="chg "><b>0%</b><small>p = 1.000</small></div></div></div></section>
+
+<section><h2>Order of work <small>edits, commands and tool calls; reads are ignored</small></h2><div class="card"><div class="tl"><div class="h"><span class="dot b"></span>control · first run</div><div class="h"><span class="dot c"></span>opus-5-5 · first run</div><div class="cell"><span class="chip same" title="write:src/slugify.js">✎ src/slugify.js</span></div><div class="cell"><span class="chip same" title="write:src/slugify.js">✎ src/slugify.js</span></div><div class="cell"><span class="chip removed" title="exec:node test.mjs">$ node test.mjs</span></div><div class="cell"></div></div></div><p class="note">Similarity between baseline runs: 100% (noise floor). Baseline vs candidate: 33%.</p></section>
+
+<section><h2>Files changed</h2><div class="card"><table><thead><tr><th>File</th><th>Baseline changes it</th><th>Candidate changes it</th><th class="num">p</th></tr></thead><tbody><tr><td class="mono">README.md</td><td><div class="rate"><span class="bar b" style="width:0px"></span>0%</div></td><td><div class="rate"><span class="bar c" style="width:45px"></span>50%</div></td><td class="num">0.429</td></tr><tr><td class="mono">src/slugify.js</td><td><div class="rate"><span class="bar b" style="width:90px"></span>100%</div></td><td><div class="rate"><span class="bar c" style="width:45px"></span>50%</div></td><td class="num">0.429</td></tr></tbody></table></div></section>
+
+<section><h2>Runs</h2><details><summary><span class="dot b"></span> control: 4 runs</summary><div class="card"><table><thead><tr><th>Run</th><th>Outcome</th><th class="num">Tools</th><th class="num">Errors</th><th class="num">Cost</th><th class="num">Tokens</th><th class="num">Files</th></tr></thead><tbody><tr><td class="mono">control-01-6d742eb47e7b</td><td>completed · check passed</td><td class="num">4</td><td class="num">0</td><td class="num">$0.215</td><td class="num">41.3k</td><td class="num">1</td></tr><tr><td class="mono">control-02-6d742eb47e7b</td><td>completed · check passed</td><td class="num">4</td><td class="num">0</td><td class="num">$0.212</td><td class="num">44.5k</td><td class="num">1</td></tr><tr><td class="mono">control-03-6d742eb47e7b</td><td>completed · check passed</td><td class="num">4</td><td class="num">0</td><td class="num">$0.215</td><td class="num">41.3k</td><td class="num">1</td></tr><tr><td class="mono">control-04-6d742eb47e7b</td><td>completed · check passed</td><td class="num">4</td><td class="num">0</td><td class="num">$0.227</td><td class="num">40.8k</td><td class="num">1</td></tr></tbody></table></div></details><details><summary><span class="dot c"></span> opus-5-5: 4 runs</summary><div class="card"><table><thead><tr><th>Run</th><th>Outcome</th><th class="num">Tools</th><th class="num">Errors</th><th class="num">Cost</th><th class="num">Tokens</th><th class="num">Files</th></tr></thead><tbody><tr><td class="mono">opus-5-5-01-f2128b1b4e63</td><td>completed · check failed</td><td class="num">2</td><td class="num">0</td><td class="num">$0.480</td><td class="num">91.6k</td><td class="num">1</td></tr><tr><td class="mono">opus-5-5-02-b9cd1ffcd35c</td><td>completed · check failed</td><td class="num">3</td><td class="num">0</td><td class="num">$0.492</td><td class="num">89.5k</td><td class="num">1</td></tr><tr><td class="mono">opus-5-5-03-f2128b1b4e63</td><td>completed · check failed</td><td class="num">2</td><td class="num">0</td><td class="num">$0.469</td><td class="num">85.4k</td><td class="num">1</td></tr><tr><td class="mono">opus-5-5-04-b9cd1ffcd35c</td><td>completed · check failed</td><td class="num">3</td><td class="num">0</td><td class="num">$0.530</td><td class="num">99.3k</td><td class="num">1</td></tr></tbody></table></div></details></section>
+
+<footer>
+
+<p><b>Method.</b> Exact permutation tests for numeric metrics and Fisher&rsquo;s exact test for proportions, α = 0.05. A finding marked <i>unconfirmed</i> is a large effect that cannot reach significance with this many runs (at least 4 per side are needed). &ldquo;Completed&rdquo; means the agent stopped on its own, not that its work is correct.</p>
+<p>Generated by idriftcheckco 0.1.0 on 2026-10-14T19:20:24.281Z. Secrets and home-directory paths were redacted at import; review before sharing publicly. This file makes no network requests.</p>
+</footer>
+</div></body></html>

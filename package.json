@@ -41,7 +41,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "prepublishOnly": "pnpm check && pnpm build"
+    "prepublishOnly": "pnpm check && pnpm build",
+    "prepare": "tsc -p tsconfig.build.json",
+    "assets": "tsx scripts/render-demo-svg.ts && tsx src/cli/bin.ts demo --out docs/demo/index.html"
   },
   "dependencies": {
     "zod": "^4.6.7"
@@ -60,7 +62,7 @@
     "type": "git",
     "url": "git+https://github.com/MicoleKurt/idriftcheckco.git"
   },
-  "homepage": "https://github.com/MicoleKurt/idriftcheckco#readme",
+  "homepage": "https://micolekurt.github.io/idriftcheckco/demo/",
   "bugs": {
     "url": "https://github.com/MicoleKurt/idriftcheckco/issues"
   }
