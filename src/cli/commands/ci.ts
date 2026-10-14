@@ -9,7 +9,7 @@ import { Store } from '../../store/store.js';
 import { num, parse, UsageError, type Ctx } from '../context.js';
 import { executeReplay, makeRunner } from '../run.js';
 import { diffRun } from './diff.js';
-import { failOn, REPLAY_OPTIONS, variantFromFlags } from './replay.js';
+import { failOn, REPLAY_OPTIONS, turnsFlag, variantFromFlags } from './replay.js';
 
 export const CI_HELP = `idriftcheckco ci
 
@@ -66,6 +66,7 @@ export async function ciCommand(ctx: Ctx, argv: string[]): Promise<number> {
         control: !values['no-control'],
         ...(values['control-model'] ? { controlVariant: { name: 'control', model: values['control-model'] } } : {}),
         ...(values.ref ? { ref: values.ref } : {}),
+        ...(turnsFlag(values.turns) ? { turns: turnsFlag(values.turns)! } : {}),
         ...(values.check ? { check: values.check } : {}),
         ...(remaining !== undefined ? { maxCostUsd: remaining } : {}),
         runner, dryRun: Boolean(values['dry-run']), yes: Boolean(values.yes), baseDir: ctx.cwd,

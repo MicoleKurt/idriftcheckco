@@ -8,6 +8,10 @@ export interface RunRequest {
   timeoutMs: number;
   /** Per-run spending cap in USD, if the runner supports one. */
   maxBudgetUsd?: number;
+  /** Tools the agent may use without asking (see replay/permissions.ts). */
+  allowedTools?: string[];
+  /** Later human prompts, sent in order into the same agent session (`--turns all`). */
+  followUps?: string[];
   signal?: AbortSignal;
 }
 

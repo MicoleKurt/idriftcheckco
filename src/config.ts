@@ -27,6 +27,13 @@ export const ConfigSchema = z
     /** Arguments placed before idriftcheckco's own, for wrappers (e.g. claudeBin "npx", claudeArgs ["claude"]). */
     claudeArgs: z.array(z.string()).default([]),
     permissionMode: z.enum(['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan']).default('acceptEdits'),
+    /**
+     * Tools replays may use without asking. "session" (default): the tools the original
+     * session used, so a replay can run the same commands. "none": leave it to permissionMode.
+     */
+    allowedTools: z.union([z.enum(['session', 'none']), z.array(z.string())]).default('session'),
+    /** Replay only the first prompt (default, cheaper) or every human turn of the session. */
+    turns: z.enum(['first', 'all']).default('first'),
     timeoutMinutes: z.number().positive().default(15),
     /** Hard spending cap per `replay`/`ci` invocation. */
     maxCostUsd: z.number().positive().optional(),

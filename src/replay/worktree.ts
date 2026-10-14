@@ -20,6 +20,49 @@ async function git(cwd: string, args: string[]): Promise<string> {
   }
 }
 
+export interface RefChoice {
+  /** Commit-ish to create the worktree from. */
+  ref: string;
+  /** Human-readable explanation of the choice (always shown in the replay plan). */
+  note: string;
+}
+
+/**
+ * Pick the commit a session most plausibly started from: the last commit on the
+ * session's branch (or HEAD) before the session's first timestamp. Replaying on HEAD
+ * instead would compare the agent against code that may have moved on since.
+ * Uncommitted work present at session time cannot be recovered; the note says so.
+ */
+export async function resolveAutoRef(repo: string, startedAt?: string, branch?: string): Promise<RefChoice> {
+  if (!startedAt || !Number.isFinite(Date.parse(startedAt))) {
+    return { ref: 'HEAD', note: 'Session start time unknown; replaying on HEAD.' };
+  }
+  let base = 'HEAD';
+  let baseLabel = 'HEAD';
+  // A branch name comes from untrusted transcript data: never let it look like an option.
+  if (branch && !branch.startsWith('-') && /^[\w./-]+$/.test(branch)) {
+    const exists = await git(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]).then(
+      () => true,
+      () => false,
+    );
+    if (exists) {
+      base = `refs/heads/${branch}`;
+      baseLabel = branch;
+    }
+  }
+  const sha = (await git(repo, ['rev-list', '-1', `--before=${new Date(startedAt).toISOString()}`, base]).catch(() => '')).trim();
+  if (!sha) {
+    return { ref: 'HEAD', note: `No commit on ${baseLabel} predates the session; replaying on HEAD.` };
+  }
+  const head = (await git(repo, ['rev-parse', 'HEAD']).catch(() => '')).trim();
+  const where = sha === head ? 'HEAD, ' : '';
+  const branchNote = branch && baseLabel !== branch ? ` (branch "${branch}" not found locally, used HEAD history)` : '';
+  return {
+    ref: sha,
+    note: `Replaying on ${sha.slice(0, 7)} (${where}last commit on ${baseLabel} before the session started${branchNote}). Uncommitted changes from that time are not included.`,
+  };
+}
+
 export interface Worktree {
   path: string;
   /** Files the agent added, modified or deleted, relative to the checkout (ground truth). */

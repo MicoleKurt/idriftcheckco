@@ -15,6 +15,10 @@ export interface ReplayOptions {
   /** Commit-ish the worktree is created from. Default HEAD. */
   ref?: string;
   task: string;
+  /** Tools the agent may use without asking (same for every arm). */
+  allowedTools?: string[];
+  /** Later human prompts to replay in the same agent session. */
+  followUps?: string[];
   arms: ArmPlan[];
   runner: AgentRunner;
   /** Shell command run in the worktree after each agent run; exit 0 = pass. */
@@ -74,6 +78,8 @@ export async function runReplay(opts: ReplayOptions): Promise<ReplayResult> {
           cwd: wt.path,
           variant: arm.variant,
           timeoutMs: opts.timeoutMs,
+          ...(opts.allowedTools ? { allowedTools: opts.allowedTools } : {}),
+          ...(opts.followUps ? { followUps: opts.followUps } : {}),
           ...(remaining !== undefined ? { maxBudgetUsd: Math.round(remaining * 100) / 100 } : {}),
           ...(opts.signal ? { signal: opts.signal } : {}),
         });

@@ -186,6 +186,10 @@ describe('replay safety rails', () => {
     expect(c.err()).toContain('Replay plan');
     expect(c.err()).toContain('estimated total');
     expect(c.err()).toContain('Dry run');
+    // realism is stated up front: which code, which tools, which turns
+    expect(c.err()).toMatch(/code: {2}(Replaying on|No commit)/);
+    expect(c.err()).toContain('tools: Bash, Edit, Read (as used in the original session)');
+    expect(c.err()).toContain('turns: 1');
     expect(existsSync(join(repo.dir, '.idriftcheckco', 'runs'))).toBe(false);
   });
 

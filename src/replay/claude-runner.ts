@@ -1,5 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rm, rmdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { parseClaudeCodeSession } from '../adapters/claude-code.js';
+import { encodeProjectDir, sessionsRoot } from '../adapters/discover.js';
 import { clip, redactString } from '../redact/redact.js';
 import type { Price } from '../trace/pricing.js';
 import type { Trace } from '../trace/schema.js';
@@ -39,12 +42,24 @@ export function buildEnv(source: NodeJS.ProcessEnv, extra: string[] = []): NodeJ
 /** Args are validated, not escaped: a `.cmd` shim on Windows needs a shell, so refuse anything shell-active. */
 const SAFE_ARG = /^[A-Za-z0-9_@+=:,./\\ \-[\]]+$/;
 
-export function buildArgs(req: RunRequest, opts: { permissionMode: string }): string[] {
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--permission-mode', opts.permissionMode];
+export interface ArgOptions {
+  permissionMode: string;
+  /**
+   * Multi-turn replay: the first turn starts a persisted session with this id, later
+   * turns resume it. Without it, runs are not persisted at all.
+   */
+  session?: { id: string; resume: boolean };
+}
+
+export function buildArgs(req: RunRequest, opts: ArgOptions): string[] {
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', opts.permissionMode];
+  if (!opts.session) args.push('--no-session-persistence');
+  else args.push(opts.session.resume ? '--resume' : '--session-id', opts.session.id);
   const v = req.variant;
   if (v.model) args.push('--model', v.model);
   if (v.mcpConfig) args.push('--mcp-config', v.mcpConfig, '--strict-mcp-config');
   if (req.maxBudgetUsd !== undefined) args.push('--max-budget-usd', String(req.maxBudgetUsd));
+  if (req.allowedTools && req.allowedTools.length > 0) args.push('--allowedTools', req.allowedTools.join(','));
   if (v.extraArgs) args.push(...v.extraArgs);
   for (const a of args) {
     if (!SAFE_ARG.test(a)) {
@@ -167,22 +182,46 @@ export class ClaudeCodeRunner implements AgentRunner {
   }
 
   async run(req: RunRequest): Promise<Trace> {
-    const cliArgs = buildArgs(req, { permissionMode: this.opts.permissionMode ?? 'acceptEdits' });
+    let task = req.task;
     if (req.variant.promptFile) {
       const text = await readFile(req.variant.promptFile, 'utf8').catch(() => {
         throw new Error(`Prompt file ${req.variant.promptFile} could not be read.`);
       });
       // An inline arg would hit shell-quoting and length limits, so append to the task on stdin.
-      req = { ...req, task: `${req.task}\n\n<additional-instructions>\n${text}\n</additional-instructions>` };
+      task = `${task}\n\n<additional-instructions>\n${text}\n</additional-instructions>`;
     }
+    const turns = [task, ...(req.followUps ?? [])];
+    const session = turns.length > 1 ? randomUUID() : undefined;
+    const permissionMode = this.opts.permissionMode ?? 'acceptEdits';
+    const prices = this.opts.prices ? { prices: this.opts.prices } : {};
     const started = Date.now();
-    const { stdout, stderr, code, timedOut } = await this.invoke(cliArgs, {
-      cwd: req.cwd, stdin: req.task, timeoutMs: req.timeoutMs, ...(req.signal ? { signal: req.signal } : {}),
-    });
 
-    const trace = parseClaudeCodeSession(stdout, { ...(this.opts.prices ? { prices: this.opts.prices } : {}) });
+    const parts: Trace[] = [];
+    const notes: string[] = [];
+    let last: Invocation | undefined;
+    try {
+      for (let i = 0; i < turns.length; i++) {
+        const remaining = req.timeoutMs - (Date.now() - started);
+        if (remaining <= 0) break;
+        const cliArgs = buildArgs(req, { permissionMode, ...(session ? { session: { id: session, resume: i > 0 } } : {}) });
+        last = await this.invoke(cliArgs, { cwd: req.cwd, stdin: turns[i], timeoutMs: remaining, ...(req.signal ? { signal: req.signal } : {}) });
+        parts.push(parseClaudeCodeSession(last.stdout, prices));
+        // A failed turn ends the conversation: later prompts would answer a reply that never came.
+        if (last.timedOut || last.code !== 0) {
+          if (i < turns.length - 1) notes.push(`Stopped after turn ${i + 1} of ${turns.length}.`);
+          break;
+        }
+      }
+    } finally {
+      if (session) await this.forgetSession(req.cwd, session);
+    }
+    if (!last) throw new Error('No time left to start the agent; raise timeoutMinutes.');
+
+    const trace = mergeTurns(parts);
     // The stream does not echo the prompt, so this adapter note is expected noise here.
-    const notes = trace.notes.filter((n) => !n.startsWith('No human prompt found'));
+    notes.unshift(...trace.notes.filter((n) => !n.startsWith('No human prompt found')));
+    if (turns.length > 1) notes.push(`Replayed ${parts.length} of ${turns.length} human turns in one agent session.`);
+    const { stderr, code, timedOut } = last;
     if (timedOut) notes.push(`Timed out after ${Math.round(req.timeoutMs / 1000)}s and was stopped.`);
     if (code !== 0 && !timedOut) {
       const why = clip(redactString(stderr.trim() || trace.outcome.finalMessage || 'no output'), 300);
@@ -195,9 +234,54 @@ export class ClaudeCodeRunner implements AgentRunner {
       source: { ...trace.source, kind: 'replay' },
       variant: req.variant,
       task: redactString(req.task),
+      humanTurns: parts.length,
+      followUps: (req.followUps ?? []).slice(0, Math.max(0, parts.length - 1)).map(redactString),
       durationMs: trace.durationMs ?? Date.now() - started,
       outcome: { ...trace.outcome, status },
       notes,
     };
   }
+
+  /**
+   * A multi-turn replay has to persist its session so later turns can resume it. Delete
+   * that transcript afterwards so replays never show up in the user's own session list.
+   */
+  private async forgetSession(cwd: string, id: string): Promise<void> {
+    const env = this.opts.env ?? process.env;
+    const dir = join(sessionsRoot(undefined, env), encodeProjectDir(cwd));
+    await rm(join(dir, `${id}.jsonl`), { force: true }).catch(() => undefined);
+    await rmdir(dir).catch(() => undefined); // only succeeds when empty
+  }
+}
+
+/** Combine the traces of consecutive turns of one agent session into one trace. */
+export function mergeTurns(parts: Trace[]): Trace {
+  const [first, ...rest] = parts;
+  if (!first) throw new Error('mergeTurns needs at least one turn.');
+  if (rest.length === 0) return first;
+  const all = [first, ...rest];
+  const lastPart = all[all.length - 1]!;
+  const sum = (f: (t: Trace) => number) => all.reduce((s, t) => s + f(t), 0);
+  const costs = all.map((t) => t.costUsd);
+  const allKnown = costs.every((c): c is number => c !== null);
+  const durations = all.map((t) => t.durationMs);
+  const uniq = (xs: string[]) => [...new Set(xs)].sort();
+  return {
+    ...first,
+    steps: all.flatMap((t) => t.steps).map((s, i) => ({ ...s, index: i })),
+    usage: {
+      inputTokens: sum((t) => t.usage.inputTokens),
+      outputTokens: sum((t) => t.usage.outputTokens),
+      cacheReadTokens: sum((t) => t.usage.cacheReadTokens),
+      cacheWriteTokens: sum((t) => t.usage.cacheWriteTokens),
+    },
+    costUsd: allKnown ? Math.round(costs.reduce((s, c) => s + c, 0) * 1e6) / 1e6 : null,
+    costSource: !allKnown ? 'unknown' : all.every((t) => t.costSource === 'reported') ? 'reported' : 'estimated',
+    durationMs: durations.every((d): d is number => d !== null) ? durations.reduce((s, d) => s + d, 0) : null,
+    filesChanged: uniq(all.flatMap((t) => t.filesChanged)),
+    filesRead: uniq(all.flatMap((t) => t.filesRead)),
+    ...(lastPart.endedAt ? { endedAt: lastPart.endedAt } : {}),
+    outcome: lastPart.outcome,
+    notes: [...new Set(all.flatMap((t) => t.notes))],
+  };
 }

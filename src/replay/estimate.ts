@@ -34,6 +34,7 @@ export function estimateReplay(
   source: Trace,
   arms: Array<{ name: string; variant: Variant; runs: number }>,
   prices: Record<string, Price> = {},
+  options: { allTurns?: boolean } = {},
 ): ReplayEstimate {
   const caveats = [
     'Estimate prices the original session\'s token usage at each model; a different model may use 0.5x to 2x as many tokens.',
@@ -54,7 +55,7 @@ export function estimateReplay(
   const known = out.filter((a) => a.costUsd !== null);
   const sum = (f: (a: ArmEstimate) => number | null) => (known.length ? known.reduce((s, a) => s + (f(a) ?? 0), 0) : null);
   const totalRuns = arms.reduce((s, a) => s + a.runs, 0);
-  if (source.humanTurns > 1) caveats.push(`The source session had ${source.humanTurns} human turns; only the first task is replayed, so real cost is likely lower.`);
+  if (source.humanTurns > 1 && !options.allTurns) caveats.push(`The source session had ${source.humanTurns} human turns; only the first task is replayed, so real cost is likely lower.`);
   if (lookupPrice(source.model, prices) === undefined && source.model) caveats.push(`Source model "${source.model}" has no known price.`);
   return {
     arms: out,

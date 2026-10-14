@@ -183,27 +183,46 @@ export default defineConfig({
   required, and `--max-cost` stops launching runs once the cap is hit.
 - The HTML report is one file with no scripts and no network requests.
 
+## How realistic is a replay?
+
+A replay is only useful if it reproduces the conditions the agent originally worked in.
+Each replay plan states, before anything runs, exactly what it reproduces:
+
+```text
+ Replay plan
+   code:  Replaying on 3f2a91c (last commit on feature/login before the session started).
+   tools: Bash, Edit, Read (as used in the original session)
+   turns: first of 3 (add --turns all to replay the follow-ups)
+```
+
+| Condition | What idriftcheckco does |
+|---|---|
+| **The code as it was** | `--ref auto` (default) replays on the last commit on the session's branch before it started, not on today's `HEAD`. Override with `--ref <commit>`. |
+| **The agent's permissions** | The replay may use the same tools the original session used (`allowedTools: "session"`), so it can run the tests the session ran instead of being blocked. Every arm gets the same set. |
+| **The whole conversation** | `--turns all` replays every human follow-up, in order, in one resumed agent session, and cleans up the transcript it creates. Default is the first prompt only, because follow-ups were written in reply to the *old* model. |
+| **Run-to-run noise** | Not removable, so it is measured: N runs per side, exact tests, `confirmed`/`unconfirmed`. |
+
 ## Limitations (please read)
 
-- **Only the first task is replayed.** Multi-turn sessions lose their follow-ups. `scan`
-  ranks single-prompt sessions highest for this reason.
-- **Agents are non-deterministic.** One run proves nothing; use 4+ runs per side.
 - **External state is not reproduced.** Network calls, databases and MCP side effects
-  may behave differently on replay. Sessions that lean on them are ranked lower.
-- **Replay uses the committed state.** Pass `--ref <commit>` to replay on the commit the
-  session started from.
+  may behave differently on replay. `scan` ranks sessions that lean on them lower.
+- **Uncommitted work is not recovered.** `--ref auto` finds the last *commit*; edits that
+  were never committed at session time are not in the replay.
+- **Follow-ups are replayed verbatim.** With `--turns all`, later prompts were written for
+  the old model's replies and may not fit the new model's. Use it to compare whole
+  workflows, and read the per-turn notes.
+- **Agents are non-deterministic.** One run proves nothing; use 4+ runs per side.
 - **The session format is undocumented and changes.** Parsing is isolated in one adapter
   ([docs/session-format.md](docs/session-format.md)); it skips what it does not
   understand and says so. Currently supported source: Claude Code transcripts.
-- **Bash side effects are invisible in transcripts.** "Files changed" for *imported*
-  sessions comes from edit tools; for *replays* it comes from `git diff` (ground truth).
-- **Cost figures are estimates** from a price table that you can override.
+- **Cost figures are estimates** from a price table that you can override; after a run,
+  the agent's own reported cost is used.
 - **The live agent path is the least-tested part.** The runner is tested against a
-  stand-in agent process (task via stdin, stream parsing, auth failure, timeouts, process
-  cleanup), but not yet in CI against a real paid run, and the agent CLI's streaming
-  output can change between versions. Before trusting it, do one tiny paid run:
-  `idriftcheckco record "Reply ok" --yes --max-cost 0.05`. A login problem is reported
-  as such and never saved as a baseline.
+  stand-in agent process (task via stdin, multi-turn resume, stream parsing, auth
+  failure, timeouts, process-tree cleanup), but not yet in CI against a real paid run,
+  and the agent CLI's output can change between versions. `idriftcheckco doctor` checks
+  the install and login for free; before trusting results, do one tiny paid run:
+  `idriftcheckco record "Reply ok" --yes --max-cost 0.05`.
 
 ## Development
 

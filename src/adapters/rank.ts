@@ -29,8 +29,8 @@ export function replayability(t: Trace): Replayability {
     reasons.push('single prompt');
   } else if (t.humanTurns <= 3) {
     score += 8;
-    warnings.push(`${t.humanTurns} human turns; only the first is replayed`);
-  } else warnings.push(`${t.humanTurns} human turns; replay would cover only the first`);
+    warnings.push(`${t.humanTurns} human turns; replays the first, or all with --turns all`);
+  } else warnings.push(`${t.humanTurns} human turns; long conversation, consider --turns all`);
 
   if (t.filesChanged.length > 0) {
     score += 20;

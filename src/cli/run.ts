@@ -8,7 +8,9 @@ import { renderHtml } from '../report/html.js';
 import { ClaudeCodeRunner } from '../replay/claude-runner.js';
 import { estimateReplay, type ReplayEstimate } from '../replay/estimate.js';
 import { FakeRunner, parseScenario } from '../replay/fake-runner.js';
+import { resolveAllowedTools } from '../replay/permissions.js';
 import { runReplay, storePersister, type ArmPlan } from '../replay/replay.js';
+import { resolveAutoRef } from '../replay/worktree.js';
 import type { AgentRunner } from '../replay/runner.js';
 import type { Store} from '../store/store.js';
 import { slug, type RunMeta } from '../store/store.js';
@@ -26,7 +28,10 @@ export interface ExecuteArgs {
   /** Re-run the unchanged setup as the baseline (recommended). When false, the original session is the baseline. */
   control: boolean;
   controlVariant?: Variant;
+  /** Commit to replay on; undefined or "auto" picks the commit the session started from. */
   ref?: string;
+  /** Replay only the first prompt, or every human turn of the session. */
+  turns?: 'first' | 'all';
   check?: string;
   maxCostUsd?: number;
   runner: AgentRunner;
@@ -74,8 +79,9 @@ function usd(x: number | null): string {
   return x === null ? 'n/a' : fmtMetric('usd', x);
 }
 
-export function describeEstimate(e: ReplayEstimate, runner: AgentRunner): string {
+export function describeEstimate(e: ReplayEstimate, runner: AgentRunner, context: string[] = []): string {
   const lines = ['', ' Replay plan'];
+  for (const c of context) lines.push(`   ${c}`);
   for (const a of e.arms) {
     lines.push(`   ${a.arm.padEnd(18)} ${String(a.runs).padStart(2)} run${a.runs === 1 ? ' ' : 's'}  ${(a.model ?? 'default model').padEnd(22)} ${usd(a.costUsd)}`);
   }
@@ -100,8 +106,22 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
     ? { name: 'control', variant: a.controlVariant ?? { name: 'control', ...(source.model ? { model: source.model } : {}) }, runs: a.candidate.runs }
     : undefined;
   const arms = control ? [control, a.candidate] : [a.candidate];
-  const estimate = estimateReplay(source, arms, config.prices);
-  ctx.stderr(describeEstimate(estimate, a.runner));
+
+  // Realism: the code as it was, the tools the session had, and (optionally) every turn.
+  const turns = a.turns ?? config.turns;
+  const followUps = turns === 'all' ? source.followUps : [];
+  const allowedTools = resolveAllowedTools(config.allowedTools, source);
+  const refChoice =
+    a.ref && a.ref !== 'auto'
+      ? { ref: a.ref, note: `Replaying on ${a.ref} (set with --ref).` }
+      : await resolveAutoRef(ctx.cwd, source.startedAt, source.gitBranch).catch(() => ({ ref: 'HEAD', note: 'Could not read git history; replaying on HEAD.' }));
+  const context = [
+    `code:  ${refChoice.note}`,
+    `tools: ${allowedTools ? `${allowedTools.join(', ')} (as used in the original session)` : `decided by permissionMode "${config.permissionMode}"`}`,
+    `turns: ${followUps.length > 0 ? `all ${followUps.length + 1} human turns` : source.followUps.length > 0 ? `first of ${source.followUps.length + 1} (add --turns all to replay the follow-ups)` : '1'}`,
+  ];
+  const estimate = estimateReplay(source, arms, config.prices, { allTurns: followUps.length > 0 });
+  ctx.stderr(describeEstimate(estimate, a.runner, context));
   await preflightOrThrow(ctx, a.runner, a.dryRun);
   if (a.dryRun) {
     ctx.stderr(' Dry run: nothing was executed.');
@@ -126,7 +146,7 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
   const runId = `${slug(source.id.slice(0, 8))}-${slug(a.candidate.name)}-${stamp()}`;
   const meta: RunMeta = {
     schemaVersion: 1, runId, createdAt: new Date().toISOString(), sourceTraceId: source.id, task: source.task,
-    ...(a.ref ? { ref: a.ref } : {}), runner: a.runner.id, runsPerArm: a.candidate.runs,
+    ref: refChoice.ref, runner: a.runner.id, runsPerArm: a.candidate.runs,
     arms: [
       ...(control ? [{ name: control.name, variant: control.variant }] : [{ name: 'original', variant: { name: 'original', ...(source.model ? { model: source.model } : {}) } }]),
       { name: a.candidate.name, variant: a.candidate.variant },
@@ -139,8 +159,10 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
   const maxCost = a.maxCostUsd ?? config.maxCostUsd;
   const result = await runReplay({
     repo: ctx.cwd,
-    ...(a.ref ? { ref: a.ref } : {}),
+    ref: refChoice.ref,
     task: source.task,
+    ...(allowedTools ? { allowedTools } : {}),
+    ...(followUps.length > 0 ? { followUps } : {}),
     arms,
     runner: a.runner,
     ...(checkCmd ? { check: checkCmd } : {}),

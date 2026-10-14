@@ -15,6 +15,8 @@ export interface TraceParts {
   label?: string;
   task: string;
   humanTurns: number;
+  followUps?: string[];
+  gitBranch?: string;
   model?: string;
   startedAt?: string;
   endedAt?: string;
@@ -77,6 +79,8 @@ export function buildTrace(parts: TraceParts): Trace {
     ...(parts.variant ? { variant: parts.variant } : {}),
     task: parts.task,
     humanTurns: parts.humanTurns,
+    followUps: parts.followUps ?? [],
+    ...(parts.gitBranch ? { gitBranch: parts.gitBranch } : {}),
     ...(parts.model ? { model: parts.model } : {}),
     ...(parts.startedAt ? { startedAt: parts.startedAt } : {}),
     ...(parts.endedAt ? { endedAt: parts.endedAt } : {}),

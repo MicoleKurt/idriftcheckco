@@ -95,6 +95,10 @@ export const TraceSchema = z.object({
   task: z.string(),
   /** Number of human prompts in the original session. Replay covers only the first. */
   humanTurns: z.number().int().nonnegative(),
+  /** Human prompts after the first, in order (redacted). Replayed with `--turns all`. */
+  followUps: z.array(z.string()).default([]),
+  /** Git branch the session ran on, when known. Used by `--ref auto`. */
+  gitBranch: z.string().optional(),
   model: z.string().optional(),
   startedAt: z.string().optional(),
   endedAt: z.string().optional(),

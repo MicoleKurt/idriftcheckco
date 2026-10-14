@@ -31,7 +31,10 @@ Options
   --control-model <id>  Model for the control arm (default: the original session's)
   --no-control          Compare against the original session instead (cheaper, weaker)
   --runs <n>            Runs per arm (default from config, 3). Use 4+ for significance.
-  --ref <commit>        Commit to replay on (default HEAD). Use the commit the session started from.
+  --ref <commit|auto>   Commit to replay on. Default "auto": the last commit on the session's
+                        branch before it started, so the agent sees the code it saw then.
+  --turns <first|all>   Replay only the first prompt (default) or every human turn, in one
+                        agent session. Follow-ups were written for the old model's replies.
   --check <cmd>         Command run after each attempt; exit 0 = pass (e.g. "pnpm test")
   --dry-run             Print the cost estimate and exit
   --max-cost <usd>      Stop launching runs once this much is spent
@@ -56,7 +59,7 @@ export function parseOverlays(items: string[] | undefined): Record<string, strin
 export const REPLAY_OPTIONS = {
   model: { type: 'string' }, 'control-model': { type: 'string' }, 'prompt-file': { type: 'string' },
   'mcp-config': { type: 'string' }, overlay: { type: 'string', multiple: true }, name: { type: 'string' },
-  runs: { type: 'string' }, ref: { type: 'string' }, check: { type: 'string' }, 'dry-run': { type: 'boolean' },
+  runs: { type: 'string' }, ref: { type: 'string' }, turns: { type: 'string' }, check: { type: 'string' }, 'dry-run': { type: 'boolean' },
   'max-cost': { type: 'string' }, yes: { type: 'boolean' }, 'no-control': { type: 'boolean' },
   runner: { type: 'string', default: 'claude' }, scenario: { type: 'string' }, seed: { type: 'string' },
   format: { type: 'string', default: 'terminal' }, 'fail-on': { type: 'string' }, out: { type: 'string' },
@@ -77,6 +80,12 @@ export function variantFromFlags(cwd: string, v: {
     ...(v['mcp-config'] ? { mcpConfig: resolve(cwd, v['mcp-config']) } : {}),
     ...(files ? { files } : {}),
   };
+}
+
+export function turnsFlag(value: string | undefined): 'first' | 'all' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'first' && value !== 'all') throw new UsageError(`--turns must be "first" or "all", got "${value}".`);
+  return value;
 }
 
 export function failOn(value: string | undefined): 'regression' | 'drift' | undefined {
@@ -106,6 +115,7 @@ export async function replayCommand(ctx: Ctx, argv: string[]): Promise<number> {
     control: !values['no-control'],
     ...(values['control-model'] ? { controlVariant: { name: 'control', model: values['control-model'] } } : {}),
     ...(values.ref ? { ref: values.ref } : {}),
+    ...(turnsFlag(values.turns) ? { turns: turnsFlag(values.turns)! } : {}),
     ...(values.check ? { check: values.check } : {}),
     ...(num(values['max-cost'], 'max-cost') !== undefined ? { maxCostUsd: num(values['max-cost'], 'max-cost')! } : {}),
     runner, dryRun: Boolean(values['dry-run']), yes: Boolean(values.yes), baseDir: ctx.cwd,

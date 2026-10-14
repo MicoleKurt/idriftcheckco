@@ -101,6 +101,8 @@ export async function runDemo(ctx: Ctx, htmlPath: string): Promise<DemoResult> {
       candidate: { name: 'opus-5-5', variant: { name: 'opus-5-5', model: 'claude-opus-5-5' }, runs: 4 },
       control: true,
       controlVariant: { name: 'control', model: 'claude-opus-4-8' },
+      // The demo session is synthetic and predates the throwaway repo's only commit.
+      ref: 'HEAD',
       runner: new FakeRunner(DEMO_SCENARIO, 11),
       dryRun: false,
       yes: true,

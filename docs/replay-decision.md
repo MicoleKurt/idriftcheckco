@@ -50,12 +50,12 @@ Cloud and CI secrets are withheld so they cannot enter the model's context.
 
 ## Limits (stated in the README)
 
-- Only the first task is replayed; follow-up human turns are not simulated.
+- Only the first task is replayed by default; `--turns all` replays the follow-ups verbatim in one resumed session (they were written for the old model's replies).
+- The replay runs on the last commit before the session (`--ref auto`); uncommitted work from that time is not included.
+- The replay may use the same tools the session used (`allowedTools: "session"`), identically for every arm.
 - Runs are non-deterministic: 4+ per side for significance.
 - External state (network, databases, MCP side effects) is not reproduced.
 - Every real replay is a paid run; hence estimates, confirmation and `--max-cost`.
 - Uncommitted changes in the user's checkout are not carried into the worktree.
 - Hooks, plugins and project instructions on the user's machine can leak into a run
-  unless `--bare` / `--setting-sources` are pinned; the permission mode defaults to
-  `acceptEdits`, which can block commands the original session ran (set `permissionMode`
-  in the config if the task needs them, ideally inside a container).
+  unless `--bare` / `--setting-sources` are pinned via `claudeArgs`.

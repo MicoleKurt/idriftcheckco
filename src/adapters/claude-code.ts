@@ -26,6 +26,7 @@ const Envelope = z.looseObject({
   sessionId: z.string().optional(),
   version: z.string().optional(),
   cwd: z.string().optional(),
+  gitBranch: z.string().optional(),
   message: z.unknown().optional(),
   total_cost_usd: z.number().optional(),
 });
@@ -187,6 +188,9 @@ export function parseClaudeCodeSession(jsonl: string, opts: ParseOptions = {}): 
   const firstPrompt = prompts[0] ? humanText(prompts[0]) : undefined;
   const task = redactString(firstPrompt ?? '(no prompt found)');
   if (!firstPrompt) notes.push('No human prompt found in transcript.');
+  const followUps = prompts.slice(1).map((p) => redactString(humanText(p) ?? '')).filter(Boolean);
+  // "HEAD" means a detached checkout, which says nothing about where the session ran.
+  const gitBranch = entries.find((e) => e.gitBranch && e.gitBranch !== 'HEAD')?.gitBranch;
 
   // Steps, usage (deduplicated by API message id), model counts.
   const steps: Step[] = [];
@@ -316,6 +320,8 @@ export function parseClaudeCodeSession(jsonl: string, opts: ParseOptions = {}): 
     ...(opts.label ? { label: opts.label } : {}),
     task,
     humanTurns: prompts.length,
+    followUps,
+    ...(gitBranch ? { gitBranch } : {}),
     ...(model ? { model } : {}),
     ...(timestamps[0] ? { startedAt: timestamps[0] } : {}),
     ...(timestamps.length > 0 ? { endedAt: timestamps[timestamps.length - 1]! } : {}),
