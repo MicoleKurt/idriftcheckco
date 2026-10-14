@@ -137,6 +137,10 @@ jobs:
           max-cost: 10          # hard spending cap for the whole job
 ```
 
+Until the npm release, the Action builds itself from its own source (adds about a minute);
+pin `version: 0.1.0` once it is on npm. It is tested end to end on every push by
+[a self-test workflow](.github/workflows/action-selftest.yml) that must catch the demo regression.
+
 The Action replays your committed traces (`.idriftcheckco/traces/`), comments on the PR
 (updating its own comment), uploads the HTML report as an artifact, and fails the job on
 regression. Exit codes everywhere: `0` ok · `1` regression found · `2` bad invocation ·

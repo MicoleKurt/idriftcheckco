@@ -1,0 +1,62 @@
+name: Action self-test
+
+# Runs this repository's own GitHub Action end to end against examples/regression-demo,
+# with the scripted agent (no API key), and asserts that the planted regression is caught.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: Action catches the demo regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the example as its own git repository
+        shell: bash
+        run: |
+          demo="$RUNNER_TEMP/regression-demo"
+          cp -r examples/regression-demo "$demo"
+          cd "$demo/repo"
+          git init -q -b main
+          git -c user.name=ci -c user.email=ci@example.com add -A
+          git -c user.name=ci -c user.email=ci@example.com commit -q -m init
+          cp ../trace.json ../scenario.json .
+
+      - name: Run the action
+        id: idc
+        continue-on-error: true
+        uses: ./action
+        with:
+          working-directory: ${{ runner.temp }}/regression-demo/repo
+          traces: trace.json
+          model: claude-opus-5-5
+          name: opus-5-5
+          runner: fake
+          scenario: scenario.json
+          runs: '4'
+          check: node test.mjs
+          comment: 'false'
+
+      - name: Assert the regression was caught
+        shell: bash
+        env:
+          VERDICT: ${{ steps.idc.outputs.verdict }}
+          CODE: ${{ steps.idc.outputs.exit-code }}
+          OUTCOME: ${{ steps.idc.outcome }}
+        run: |
+          echo "verdict=$VERDICT exit-code=$CODE step=$OUTCOME"
+          test "$VERDICT" = "regression"
+          test "$CODE" = "1"
+          test "$OUTCOME" = "failure"
+          test -f "$RUNNER_TEMP/regression-demo/repo/.idriftcheckco/out/comment.md"
+          test -f "$RUNNER_TEMP/regression-demo/repo/.idriftcheckco/out/badge.json"
