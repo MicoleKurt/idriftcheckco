@@ -13,6 +13,15 @@ comparison table is published. Claims below are from search summaries unless mar
 | agent-replay, TraceFork, stepfork, pytest-agentreplay, AgentReplay, tool-call-trace-replay, replayproof, TraceForge | SDK-level record/replay for **your own** LLM agent code (LangGraph, custom) | No (need instrumentation) | Swap model in your code | Tool-seq diffs; mostly exact-match, few handle variance |
 | Langfuse, Braintrust, LangSmith, Promptfoo, Inspect AI | Eval platforms; datasets, judges, dashboards | No (ingest traces via SDK) | Yes, with dataset | Yes, but you author datasets |
 
+## Status of this analysis
+
+Written from web search summaries on 2026-10-14. **Not yet verified per repository**:
+stars, release activity, licences and exact capabilities of the small projects listed.
+One tool described as directly overlapping could not be opened at the reported URL
+(404 from both the GitHub CLI and a web fetch), so its existence and scope are
+unconfirmed. Before publishing a named comparison table, check each project by hand and
+correct this page. The README compares by *category* for that reason.
+
 ## Honest conclusions
 
 1. **Catacomb is the direct overlap and must be evaluated first-hand.** The only link I

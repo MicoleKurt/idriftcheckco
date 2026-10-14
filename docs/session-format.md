@@ -65,6 +65,21 @@ Tool-call linkage: `tool_use.id` ⇄ `tool_result.tool_use_id`; also `sourceTool
 adapter must verify them against fixtures (`file_path` + `old_string/new_string` /
 `content` is the expectation, not a fact yet).
 
+## Verified later (while building the adapter)
+
+- `Edit` input: `file_path`, `old_string`, `new_string`, `replace_all`. `Write` input:
+  `file_path`, `content`. Both confirmed against real sessions (an older `file_text`
+  variant also exists). Subagent calls appear as `Agent{description, subagent_type, prompt}`.
+- A "user" line is a human prompt only if its content is a plain string (or text blocks)
+  that does not start with harness chatter: `<local-command…`, `<command-name>`,
+  `<task-notification>`, `<system-reminder>`, `Caveat:`. Interrupts arrive as the text
+  `[Request interrupted by user…]`.
+- `system` entries of subtype `compact_boundary` carry `logicalParentUuid` while their
+  `parentUuid` is null; follow it when walking the chain, or you lose everything before a
+  compaction.
+- The adapter parses all 79 real sessions on the author's machine (20,206 tool calls, 0
+  failures, about 7 s). Committed fixtures are synthetic, built to this shape.
+
 ## Implications for the design
 
 1. **Adapter boundary is mandatory.** 30 writer versions in 3 months, fields appear and

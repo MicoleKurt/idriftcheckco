@@ -1,0 +1,25 @@
+name: Good first issue (maintainers)
+description: A small, well-scoped task for a new contributor
+labels: [good first issue]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where to look
+      description: Files and functions to start from.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      description: Behavior, the test that proves it, and any docs to update.
+    validations:
+      required: true
