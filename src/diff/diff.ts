@@ -1,4 +1,5 @@
 import { totalTokens } from '../trace/pricing.js';
+import { fmtMetric, fmtP, pct } from '../util/format.js';
 import { toolCalls, type Trace } from '../trace/schema.js';
 import { isVerificationMilestone, milestones, milestoneSet } from './milestones.js';
 import {
@@ -42,14 +43,6 @@ function proportionEvidence(p: number | null, rateDiff: number, alpha: number): 
   return undefined;
 }
 
-function pct(x: number): string {
-  return `${x >= 0 ? '+' : ''}${Math.round(x * 100)}%`;
-}
-
-function fmtP(p: number | null): string {
-  return p === null ? '' : ` (p=${p < 0.001 ? '<0.001' : p.toFixed(3)})`;
-}
-
 function groupInfo(label: string, traces: Trace[]): GroupInfo {
   const models = [...new Set(traces.map((t) => t.model).filter((m): m is string => !!m))].sort();
   return { label, n: traces.length, models, traceIds: traces.map((t) => t.id) };
@@ -75,20 +68,6 @@ const METRICS: Array<{
   { name: 'durationMs', label: 'Duration', unit: 'ms', pick: (t) => t.durationMs, floor: 2000, lowerIsBetter: true },
   { name: 'toolErrors', label: 'Tool errors', unit: 'count', pick: (t) => toolCalls(t).filter((c) => !c.ok).length, floor: 1, lowerIsBetter: true },
 ];
-
-function fmtMetric(unit: MetricComparison['unit'], v: number): string {
-  if (!Number.isFinite(v)) return 'n/a';
-  switch (unit) {
-    case 'usd':
-      return `$${v.toFixed(v < 1 ? 3 : 2)}`;
-    case 'ms':
-      return v >= 60_000 ? `${(v / 60_000).toFixed(1)}m` : `${(v / 1000).toFixed(1)}s`;
-    case 'tokens':
-      return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
-    default:
-      return Number.isInteger(v) ? `${v}` : v.toFixed(1);
-  }
-}
 
 function pairwiseSimilarity(a: string[][], b: string[][]): number {
   const sims: number[] = [];
