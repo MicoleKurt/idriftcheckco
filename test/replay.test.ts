@@ -110,6 +110,19 @@ describe('worktree', () => {
     }
   });
 
+  it('kills a check command that exceeds its timeout (whole process tree)', async () => {
+    repo = makeRepo(DEMO_FILES);
+    const wt = await createWorktree(repo.dir);
+    try {
+      const started = Date.now();
+      const res = await wt.runCheck('node -e "setInterval(() => {}, 1000)"', 800);
+      expect(res.exitCode).not.toBe(0);
+      expect(Date.now() - started).toBeLessThan(15_000);
+    } finally {
+      await wt.cleanup();
+    }
+  }, 30_000);
+
   it('refuses overlays that escape the worktree', async () => {
     repo = makeRepo(DEMO_FILES);
     const wt = await createWorktree(repo.dir);

@@ -4,10 +4,13 @@ import { parseClaudeCodeSession } from '../adapters/claude-code.js';
 import { clip, redactString } from '../redact/redact.js';
 import type { Price } from '../trace/pricing.js';
 import type { Trace } from '../trace/schema.js';
+import { killTree } from './proc.js';
 import type { AgentRunner, RunRequest } from './runner.js';
 
 export interface ClaudeRunnerOptions {
   bin?: string;
+  /** Arguments placed before the generated ones (wrappers such as `node fake-cli.mjs`). */
+  binArgs?: string[];
   permissionMode?: string;
   /** Extra env var names to pass through (everything else is withheld). */
   envAllowlist?: string[];
@@ -49,6 +52,11 @@ export function buildArgs(req: RunRequest, opts: { permissionMode: string; syste
   return args;
 }
 
+/** Patterns that mean the agent CLI could not authenticate (not a behavior regression). */
+const AUTH_FAILURE = /failed to authenticate|oauth session expired|invalid api key|not logged in|authentication_error/i;
+export const AUTH_HINT =
+  'The agent CLI could not authenticate. Log in (`claude auth login`) or set ANTHROPIC_API_KEY, then re-run. This run says nothing about model behavior.';
+
 function quoteForShell(a: string): string {
   return /\s/.test(a) ? `"${a}"` : a;
 }
@@ -69,7 +77,7 @@ export class ClaudeCodeRunner implements AgentRunner {
 
   async run(req: RunRequest): Promise<Trace> {
     const bin = this.opts.bin ?? 'claude';
-    const args = buildArgs(req, { permissionMode: this.opts.permissionMode ?? 'acceptEdits' });
+    const args = [...(this.opts.binArgs ?? []), ...buildArgs(req, { permissionMode: this.opts.permissionMode ?? 'acceptEdits' })];
     if (req.variant.promptFile) {
       const text = await readFile(req.variant.promptFile, 'utf8').catch(() => {
         throw new Error(`Prompt file ${req.variant.promptFile} could not be read.`);
@@ -83,17 +91,19 @@ export class ClaudeCodeRunner implements AgentRunner {
 
     const { stdout, stderr, code, timedOut } = await new Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean }>(
       (resolveP, reject) => {
-        const child = spawn(useShell ? quoteForShell(bin) : bin, useShell ? args.map(quoteForShell) : args, {
-          cwd: req.cwd, env, shell: useShell, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-        });
+        // With a shell, pass ONE command string: Node deprecates (DEP0190) shell + args array.
+        // Every arg was validated against SAFE_ARG, so concatenation is safe.
+        const child = useShell
+          ? spawn([bin, ...args].map(quoteForShell).join(' '), { cwd: req.cwd, env, shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+          : spawn(bin, args, { cwd: req.cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
         let out = '';
         let err = '';
         let timedOutFlag = false;
         const timer = setTimeout(() => {
           timedOutFlag = true;
-          child.kill();
+          killTree(child);
         }, req.timeoutMs);
-        req.signal?.addEventListener('abort', () => child.kill(), { once: true });
+        req.signal?.addEventListener('abort', () => killTree(child), { once: true });
         child.stdout.on('data', (d: Buffer) => (out += d.toString('utf8')));
         child.stderr.on('data', (d: Buffer) => (err = (err + d.toString('utf8')).slice(-4000)));
         child.on('error', (e: NodeJS.ErrnoException) => {
@@ -114,9 +124,16 @@ export class ClaudeCodeRunner implements AgentRunner {
     );
 
     const trace = parseClaudeCodeSession(stdout, { ...(this.opts.prices ? { prices: this.opts.prices } : {}) });
-    const notes = [...trace.notes];
+    // The stream does not echo the prompt, so this adapter note is expected noise here.
+    const notes = trace.notes.filter((n) => !n.startsWith('No human prompt found'));
     if (timedOut) notes.push(`Timed out after ${Math.round(req.timeoutMs / 1000)}s and was stopped.`);
-    if (code !== 0 && !timedOut) notes.push(`Agent CLI exited with code ${code}: ${clip(redactString(stderr.trim()), 300)}`);
+    if (code !== 0 && !timedOut) {
+      const why = clip(redactString(stderr.trim() || trace.outcome.finalMessage || 'no output'), 300);
+      notes.push(`Agent CLI exited with code ${code}: ${why}`);
+    }
+    if (AUTH_FAILURE.test(`${stderr} ${trace.outcome.finalMessage ?? ''}`)) {
+      notes.push(AUTH_HINT);
+    }
     const status = timedOut ? 'interrupted' : code !== 0 && trace.outcome.status !== 'completed' ? 'error' : trace.outcome.status;
     return {
       ...trace,

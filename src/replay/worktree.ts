@@ -5,6 +5,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { clip, redactString } from '../redact/redact.js';
 import type { CheckResult } from '../trace/schema.js';
+import { killTree } from './proc.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -86,7 +87,7 @@ export async function createWorktree(repo: string, ref = 'HEAD'): Promise<Worktr
         };
         child.stdout.on('data', onData);
         child.stderr.on('data', onData);
-        const timer = setTimeout(() => child.kill(), timeoutMs);
+        const timer = setTimeout(() => killTree(child), timeoutMs);
         child.on('error', (e) => {
           clearTimeout(timer);
           resolveP({ command, exitCode: 127, outputTail: clip(redactString(String(e.message)), 400) });

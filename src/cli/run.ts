@@ -151,6 +151,8 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
     },
   });
   for (const n of result.notes) ctx.stderr(`  ! ${n}`);
+  const authNote = Object.values(result.arms).flat().flatMap((t) => t.notes).find((n) => n.startsWith('The agent CLI could not authenticate'));
+  if (authNote) ctx.stderr(`  ! ${authNote}`);
 
   const baseline = control ? (result.arms[control.name] ?? []) : [source];
   if (!control) await store.saveRunTrace(runId, 'original', 0, source);
