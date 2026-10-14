@@ -1,10 +1,9 @@
-import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { parseClaudeCodeSession } from '../adapters/claude-code.js';
 import { clip, redactString } from '../redact/redact.js';
 import type { Price } from '../trace/pricing.js';
 import type { Trace } from '../trace/schema.js';
-import { killTree } from './proc.js';
+import { killTree, spawnManaged } from './proc.js';
 import type { AgentRunner, RunRequest } from './runner.js';
 
 export interface ClaudeRunnerOptions {
@@ -94,8 +93,8 @@ export class ClaudeCodeRunner implements AgentRunner {
         // With a shell, pass ONE command string: Node deprecates (DEP0190) shell + args array.
         // Every arg was validated against SAFE_ARG, so concatenation is safe.
         const child = useShell
-          ? spawn([bin, ...args].map(quoteForShell).join(' '), { cwd: req.cwd, env, shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
-          : spawn(bin, args, { cwd: req.cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+          ? spawnManaged([bin, ...args].map(quoteForShell).join(' '), [], { cwd: req.cwd, env, shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+          : spawnManaged(bin, args, { cwd: req.cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
         let out = '';
         let err = '';
         let timedOutFlag = false;

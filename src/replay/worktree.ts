@@ -1,11 +1,11 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { clip, redactString } from '../redact/redact.js';
 import type { CheckResult } from '../trace/schema.js';
-import { killTree } from './proc.js';
+import { killTree, spawnManaged } from './proc.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -80,7 +80,7 @@ export async function createWorktree(repo: string, ref = 'HEAD'): Promise<Worktr
     },
     runCheck(command, timeoutMs) {
       return new Promise<CheckResult>((resolveP) => {
-        const child = spawn(command, { cwd: path, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawnManaged(command, [], { cwd: path, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
         let buf = '';
         const onData = (d: Buffer) => {
           buf = (buf + d.toString('utf8')).slice(-4000);
