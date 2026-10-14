@@ -31,6 +31,11 @@ export function renderJson(report: DiffReport, failOn: 'regression' | 'drift' = 
 
 /** Shields.io "endpoint" payload for a README badge. */
 export function badgeEndpoint(report: DiffReport): { schemaVersion: 1; label: string; message: string; color: string } {
+  return badgeForVerdict(report.verdict);
+}
+
+/** Badge payload for a bare verdict (used for multi-task suites). */
+export function badgeForVerdict(verdict: DiffReport['verdict']): { schemaVersion: 1; label: string; message: string; color: string } {
   const map = {
     regression: ['regression', 'red'],
     'likely-regression': ['likely regression', 'red'],
@@ -38,6 +43,36 @@ export function badgeEndpoint(report: DiffReport): { schemaVersion: 1; label: st
     'possible-drift': ['possible drift', 'yellow'],
     'no-change': ['stable', 'brightgreen'],
   } as const;
-  const [message, color] = map[report.verdict];
+  const [message, color] = map[verdict];
   return { schemaVersion: 1, label: 'agent drift', message, color };
+}
+
+const VERDICT_ORDER: DiffReport['verdict'][] = ['no-change', 'possible-drift', 'drift', 'likely-regression', 'regression'];
+
+/** The most severe verdict among several. */
+export function worstVerdict(verdicts: DiffReport['verdict'][]): DiffReport['verdict'] {
+  return verdicts.reduce((w, v) => (VERDICT_ORDER.indexOf(v) > VERDICT_ORDER.indexOf(w) ? v : w), 'no-change' as DiffReport['verdict']);
+}
+
+export interface SuiteResult {
+  schemaVersion: 1;
+  verdict: DiffReport['verdict'];
+  exitCode: 0 | 1;
+  failOn: 'regression' | 'drift';
+  tasks: Array<CiResult & { task: string }>;
+}
+
+/** Aggregate several per-task reports (one per replayed session) into one CI result. */
+export function toSuiteResult(
+  items: Array<{ task: string; report: DiffReport }>,
+  failOn: 'regression' | 'drift' = 'regression',
+): SuiteResult {
+  const verdict = worstVerdict(items.map((i) => i.report.verdict));
+  return {
+    schemaVersion: 1,
+    verdict,
+    exitCode: exitCodeFor(verdict, failOn),
+    failOn,
+    tasks: items.map((i) => ({ task: i.task, ...toCiResult(i.report, failOn) })),
+  };
 }

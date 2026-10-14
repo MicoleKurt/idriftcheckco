@@ -13,6 +13,35 @@ const EMOJI = {
   'no-change': '🟢',
 } as const;
 
+const SEVERITY_ORDER = ['no-change', 'possible-drift', 'drift', 'likely-regression', 'regression'] as const;
+
+/** One PR comment for a multi-task suite: overall verdict, then one collapsible section per task. */
+export function renderSuiteMarkdown(
+  items: Array<{ task: string; report: DiffReport }>,
+  opts: { reportUrl?: string } = {},
+): string {
+  if (items.length === 1) return renderMarkdown(items[0]!.report, opts);
+  const worst = items.reduce<DiffReport['verdict']>(
+    (w, i) => (SEVERITY_ORDER.indexOf(i.report.verdict) > SEVERITY_ORDER.indexOf(w) ? i.report.verdict : w),
+    'no-change',
+  );
+  const lines = [COMMENT_MARKER, `### ${EMOJI[worst]} idriftcheckco: ${VERDICT_LABEL[worst]} across ${items.length} tasks`, ''];
+  for (const i of items) {
+    const body = renderMarkdown(i.report).replace(COMMENT_MARKER, '').trim();
+    const title = i.task.replace(/\s+/g, ' ').slice(0, 80).replace(/</g, '&lt;');
+    lines.push(
+      `<details${i.report.verdict === 'no-change' ? '' : ' open'}><summary>${EMOJI[i.report.verdict]} <b>${VERDICT_LABEL[i.report.verdict]}</b>: ${title}</summary>`,
+      '',
+      body,
+      '',
+      '</details>',
+      '',
+    );
+  }
+  if (opts.reportUrl) lines.push(`[Full reports](${opts.reportUrl})`);
+  return lines.join('\n').trimEnd() + '\n';
+}
+
 /** Markdown summary for PR comments and CI step summaries. */
 export function renderMarkdown(report: DiffReport, opts: { reportUrl?: string } = {}): string {
   const lines: string[] = [COMMENT_MARKER];

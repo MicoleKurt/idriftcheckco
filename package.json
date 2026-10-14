@@ -17,7 +17,7 @@
     "node": ">=20"
   },
   "bin": {
-    "idriftcheckco": "dist/cli/main.js"
+    "idriftcheckco": "dist/cli/bin.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx src/cli/main.ts",
+    "dev": "tsx src/cli/bin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

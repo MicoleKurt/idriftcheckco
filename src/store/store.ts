@@ -66,7 +66,9 @@ async function readJson(path: string): Promise<unknown> {
  */
 export class Store {
   readonly root: string;
+  private readonly cwd: string;
   constructor(cwd: string, dir = DEFAULT_STORE_DIR) {
+    this.cwd = cwd;
     this.root = resolve(cwd, dir);
   }
 
@@ -99,7 +101,8 @@ export class Store {
 
   /** Resolve an id, id prefix, or file path to a stored trace. */
   async resolveTrace(ref: string): Promise<Trace> {
-    if (await exists(ref)) return this.loadTraceFile(ref);
+    const asPath = resolve(this.cwd, ref);
+    if (ref.endsWith('.json') && (await exists(asPath))) return this.loadTraceFile(asPath);
     const all = await this.listTraces();
     const exact = all.find((t) => t.id === ref);
     if (exact) return exact;

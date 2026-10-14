@@ -180,7 +180,7 @@ export function parseClaudeCodeSession(jsonl: string, opts: ParseOptions = {}): 
 
   const cwd = entries.find((e) => e.cwd)?.cwd;
   const sourceVersion = entries.find((e) => e.version)?.version;
-  const sessionId = entries.find((e) => e.sessionId)?.sessionId ?? opts.sessionId;
+  const sessionId = opts.sessionId ?? entries.find((e) => e.sessionId)?.sessionId;
 
   // Task and human turn count.
   const prompts = messages.filter(isHumanPrompt);
@@ -306,6 +306,7 @@ export function parseClaudeCodeSession(jsonl: string, opts: ParseOptions = {}): 
   const reported = typeof resultLine?.total_cost_usd === 'number' ? resultLine.total_cost_usd : undefined;
 
   return buildTrace({
+    ...(sessionId ? { id: sessionId } : {}),
     source: {
       kind: 'claude-code',
       adapter: ADAPTER_ID,
