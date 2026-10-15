@@ -87,6 +87,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .chip.removed{background:rgba(214,48,58,.12);border-color:var(--red);color:var(--red);text-decoration:line-through}
 .chip.added{background:rgba(79,124,255,.12);border-color:var(--base)}
 details{margin-top:10px}
+.steprow td{border-top:0;padding-top:0}
+.steprow details{margin:0}
+ol.steps{margin:6px 0 4px;padding-left:22px;font-size:12.5px;max-height:320px;overflow:auto}
+ol.steps li{padding:1px 0}
+ol.steps .tool{font-weight:600}
+ol.steps li.err{color:var(--red)}
+ol.steps li.more{color:var(--mute);list-style:none}
 summary{cursor:pointer;color:var(--mute);font-size:13px;padding:6px 0}
 .note{margin:6px 0;color:var(--mute);font-size:13px}
 footer{margin-top:36px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px}
@@ -196,6 +203,21 @@ function filesHtml(report: DiffReport): string {
   return `<table><thead><tr><th>File</th><th>Baseline changes it</th><th>Candidate changes it</th><th class="num">p</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+/** Steps shown per run before collapsing the rest into a "+N more" line. */
+export const MAX_STEPS_SHOWN = 80;
+
+/** The ordered tool calls of one run, as a compact list (escaped, capped). */
+function stepsHtml(t: Trace): string {
+  const calls = toolCalls(t);
+  if (calls.length === 0) return '<p class="note">No tool calls.</p>';
+  const items = calls
+    .slice(0, MAX_STEPS_SHOWN)
+    .map((c) => `<li class="${c.ok ? '' : 'err'}"><span class="tool">${esc(c.name)}</span>${c.target ? ` <span class="mono">${esc(c.target)}</span>` : ''}${c.ok ? '' : ' <b>error</b>'}</li>`)
+    .join('');
+  const more = calls.length > MAX_STEPS_SHOWN ? `<li class="more">+${calls.length - MAX_STEPS_SHOWN} more</li>` : '';
+  return `<ol class="steps">${items}${more}</ol>`;
+}
+
 function runsHtml(label: string, cls: string, traces: Trace[]): string {
   const rows = traces
     .map((t) => {
@@ -204,7 +226,8 @@ function runsHtml(label: string, cls: string, traces: Trace[]): string {
         t.outcome.check ? ` · check ${t.outcome.check.exitCode === 0 ? 'passed' : 'failed'}` : ''
       }</td><td class="num">${calls.length}</td><td class="num">${calls.filter((c) => !c.ok).length}</td><td class="num">${
         t.costUsd === null ? 'n/a' : esc(fmtMetric('usd', t.costUsd))
-      }</td><td class="num">${esc(fmtMetric('tokens', totalTokens(t.usage)))}</td><td class="num">${t.filesChanged.length}</td></tr>`;
+      }</td><td class="num">${esc(fmtMetric('tokens', totalTokens(t.usage)))}</td><td class="num">${t.filesChanged.length}</td></tr>` +
+        `<tr class="steprow"><td colspan="7"><details><summary>What this run did (${calls.length} step${calls.length === 1 ? '' : 's'})</summary>${stepsHtml(t)}</details></td></tr>`;
     })
     .join('');
   return `<details><summary><span class="dot ${cls}"></span> ${esc(label)}: ${traces.length} run${traces.length === 1 ? '' : 's'}</summary><div class="card"><table><thead><tr><th>Run</th><th>Outcome</th><th class="num">Tools</th><th class="num">Errors</th><th class="num">Cost</th><th class="num">Tokens</th><th class="num">Files</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;

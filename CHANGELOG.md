@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- `--runs auto`: adaptive run counts with a group-sequential design (Bonferroni alpha
+  spending, looks at 5, 7, 8 runs per side by default). Stops early on a confirmed
+  regression or when there is no sign of a difference; arms run interleaved. An obvious
+  regression now costs 10 runs instead of 16. `--max-runs` and config `maxRuns`.
+- HTML report: each run expands to the ordered list of what it did (tool, target,
+  errors), capped at 80 steps.
+- Release workflow with npm trusted publishing and provenance; RELEASING.md.
+- Engineering plan for this release in docs/plans/v0.2.md, including a scan speed-up
+  that was measured, found to be noise, and reverted.
+
 ## 0.1.0 (2026-10-15)
 
 First release.

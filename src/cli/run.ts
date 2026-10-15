@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { diffGroups } from '../diff/diff.js';
+import { decideStop, describeStop, planLooks, type StopReason } from '../diff/sequential.js';
 import type { DiffReport } from '../diff/types.js';
 import type { Config } from '../config.js';
 import { renderHtml } from '../report/html.js';
@@ -36,6 +37,8 @@ export interface ExecuteArgs {
   maxCostUsd?: number;
   runner: AgentRunner;
   dryRun: boolean;
+  /** `--runs auto`: candidate.runs is the maximum and the replay stops early when the answer is clear. */
+  adaptive?: boolean;
   yes: boolean;
   /** Where overlay source paths resolve from. */
   baseDir: string;
@@ -120,7 +123,16 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
     `tools: ${allowedTools ? `${allowedTools.join(', ')} (as used in the original session)` : `decided by permissionMode "${config.permissionMode}"`}`,
     `turns: ${followUps.length > 0 ? `all ${followUps.length + 1} human turns` : source.followUps.length > 0 ? `first of ${source.followUps.length + 1} (add --turns all to replay the follow-ups)` : '1'}`,
   ];
+  const plan = a.adaptive ? planLooks(config.alpha, a.candidate.runs) : undefined;
   const estimate = estimateReplay(source, arms, config.prices, { allTurns: followUps.length > 0 });
+  // Adaptive runs may stop at the first look: price that best case too.
+  const best = plan ? estimateReplay(source, arms.map((x) => ({ ...x, runs: plan.looks[0]! })), config.prices, { allTurns: followUps.length > 0 }) : undefined;
+  if (plan) {
+    context.push(
+      `runs:  adaptive, ${plan.looks[0]} to ${plan.maxRuns} per side (looks at ${plan.looks.join(', ')}, alpha ${plan.alphaPerLook.toFixed(4)} each)` +
+        (a.runner.paid && best?.totalUsd != null ? `; best case ${usd(best.totalUsd)}, worst case below` : ''),
+    );
+  }
   ctx.stderr(describeEstimate(estimate, a.runner, context));
   await preflightOrThrow(ctx, a.runner, a.dryRun);
   if (a.dryRun) {
@@ -137,9 +149,10 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
       );
     }
   }
-  if (a.maxCostUsd !== undefined && estimate.totalUsd !== null && estimate.lowUsd !== null && estimate.lowUsd > a.maxCostUsd) {
+  const floor = (best ?? estimate).lowUsd;
+  if (a.maxCostUsd !== undefined && estimate.totalUsd !== null && floor !== null && floor > a.maxCostUsd) {
     throw new UsageError(
-      `The low-end estimate ($${estimate.lowUsd.toFixed(2)}) already exceeds --max-cost $${a.maxCostUsd.toFixed(2)}. Reduce --runs, pick a cheaper model, or raise the cap.`,
+      `The low-end estimate ($${floor.toFixed(2)}) already exceeds --max-cost $${a.maxCostUsd.toFixed(2)}. Reduce --runs, pick a cheaper model, or raise the cap.`,
     );
   }
 
@@ -157,24 +170,62 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
 
   const checkCmd = a.check ?? config.check;
   const maxCost = a.maxCostUsd ?? config.maxCostUsd;
-  const result = await runReplay({
+  const common = {
     repo: ctx.cwd,
     ref: refChoice.ref,
     task: source.task,
     ...(allowedTools ? { allowedTools } : {}),
     ...(followUps.length > 0 ? { followUps } : {}),
-    arms,
     runner: a.runner,
     ...(checkCmd ? { check: checkCmd } : {}),
     timeoutMs: Math.round(config.timeoutMinutes * 60_000),
-    ...(maxCost !== undefined ? { maxCostUsd: maxCost } : {}),
     baseDir: a.baseDir,
     persist: storePersister(store, runId),
-    onProgress: (e) => {
-      if (!e.trace) ctx.stderr(`  [${e.index + 1}/${e.total}] ${e.arm} …`);
-      else ctx.stderr(`  [${e.index}/${e.total}] ${e.arm} done · ${e.trace.outcome.status} · ${usd(e.trace.costUsd)} · spent ${usd(e.spentUsd)}`);
-    },
-  });
+  };
+  const result: { arms: Record<string, Trace[]>; spentUsd: number; truncated: boolean; notes: string[] } = { arms: {}, spentUsd: 0, truncated: false, notes: [] };
+  let adaptiveNote: string | undefined;
+
+  if (!plan) {
+    const r = await runReplay({
+      ...common, arms, ...(maxCost !== undefined ? { maxCostUsd: maxCost } : {}),
+      onProgress: (e) => {
+        if (!e.trace) ctx.stderr(`  [${e.index + 1}/${e.total}] ${e.arm} …`);
+        else ctx.stderr(`  [${e.index}/${e.total}] ${e.arm} done · ${e.trace.outcome.status} · ${usd(e.trace.costUsd)} · spent ${usd(e.spentUsd)}`);
+      },
+    });
+    Object.assign(result, r);
+  } else {
+    // Interleave the arms one run at a time so drift over time hits both sides equally.
+    let done = 0;
+    let reason: StopReason = 'continue';
+    outer: for (const [i, look] of plan.looks.entries()) {
+      while (done < look) {
+        const remaining = maxCost === undefined ? undefined : maxCost - result.spentUsd;
+        const r = await runReplay({
+          ...common, arms: arms.map((x) => ({ ...x, runs: 1 })), indexOffset: done,
+          ...(remaining !== undefined ? { maxCostUsd: Math.max(0, remaining) } : {}),
+          onProgress: (e) => {
+            if (e.trace) ctx.stderr(`  run ${done + 1} · ${e.arm} done · ${e.trace.outcome.status} · ${usd(e.trace.costUsd)} · spent ${usd(result.spentUsd + e.spentUsd)}`);
+          },
+        });
+        for (const [arm, traces] of Object.entries(r.arms)) (result.arms[arm] ??= []).push(...traces);
+        result.spentUsd += r.spentUsd;
+        result.notes.push(...r.notes);
+        if (r.truncated) {
+          result.truncated = true;
+          break outer;
+        }
+        done++;
+      }
+      const sideA = control ? (result.arms[control.name] ?? []) : [source];
+      const sideB = result.arms[a.candidate.name] ?? [];
+      if (sideA.length === 0 || sideB.length === 0) break;
+      reason = decideStop(diffGroups(sideA, sideB, { alpha: plan.alphaPerLook, softThreshold: config.softThreshold }), i === plan.looks.length - 1);
+      ctx.stderr(`  look at ${done} runs per side: ${reason === 'continue' ? 'evidence mixed, continuing' : reason}`);
+      if (reason !== 'continue') break;
+    }
+    adaptiveNote = describeStop(reason === 'continue' ? 'max-runs' : reason, done, plan);
+  }
   for (const n of result.notes) ctx.stderr(`  ! ${n}`);
   const authNote = Object.values(result.arms).flat().flatMap((t) => t.notes).find((n) => n.startsWith('The agent CLI could not authenticate'));
   if (authNote) ctx.stderr(`  ! ${authNote}`);
@@ -185,7 +236,8 @@ export async function executeReplay(a: ExecuteArgs): Promise<ExecuteResult> {
   if (baseline.length === 0 || candidate.length === 0) {
     throw new Error(`Replay produced no complete runs for ${baseline.length === 0 ? 'the baseline' : 'the candidate'}. ${result.notes.join(' ')} Nothing to compare; see .idriftcheckco/runs/${runId}.`);
   }
-  const report = diffGroups(baseline, candidate, { alpha: config.alpha, softThreshold: config.softThreshold });
+  const report = diffGroups(baseline, candidate, { alpha: plan ? plan.alphaPerLook : config.alpha, softThreshold: config.softThreshold });
+  if (adaptiveNote) report.notes.unshift(adaptiveNote);
   if (!control) report.notes.unshift('Baseline is the original human session, not a re-run; follow-up turns and repo state differ. Use control runs (default) for a fair comparison.');
   const html = renderHtml(report, { baseline, candidate, generatedAt: new Date().toISOString() });
   let reportPath: string;

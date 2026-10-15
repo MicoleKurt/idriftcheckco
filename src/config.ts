@@ -18,7 +18,9 @@ export const ConfigSchema = z
     /** Command run in the replay worktree after the agent finishes, e.g. `pnpm test`. Exit 0 = pass. */
     check: z.string().optional(),
     /** Replays per arm. 3 is cheap; 4+ allows statistically significant verdicts. */
-    runs: z.number().int().min(1).max(50).default(3),
+    runs: z.union([z.number().int().min(1).max(50), z.literal('auto')]).default(3),
+    /** Upper bound for `runs: "auto"` (adaptive runs stop earlier when the answer is clear). */
+    maxRuns: z.number().int().min(2).max(50).default(8),
     alpha: z.number().gt(0).lt(1).default(0.05),
     /** Smallest relative change in cost/steps/tokens/time worth reporting. */
     softThreshold: z.number().gt(0).default(0.25),

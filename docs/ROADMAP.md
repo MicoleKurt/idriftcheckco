@@ -57,6 +57,11 @@ Each is small, has a clear definition of done, and points at the files to start 
 
 ## Next (needs design discussion first)
 
+- **Faster `scan` with worker threads.** Parsing is CPU-bound; async concurrency was
+  measured at about 3% (v0.2 plan, item 4). Worker threads are the real fix.
+- **More adapters** need real transcripts to build against; the project never guesses a
+  format. Contributions with sanitized samples from other agent CLIs are welcome.
+
 - **More adapters.** Other agent CLIs' session formats behind the same `Trace` type
   (one file in `src/adapters/` plus a fixture; the core must not change).
 - **Sequential testing.** Stop replaying as soon as the result is conclusive, to cut

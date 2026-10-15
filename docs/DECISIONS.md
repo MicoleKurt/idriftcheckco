@@ -89,3 +89,24 @@ appear in the user's own session list. A failed turn ends the conversation.
 A replay against a logged-out agent CLI produced N failed, paid-for runs and a
 misleading report. `auth status` is free and local, so paid runs now refuse to start
 when the CLI is missing or logged out.
+
+## 16. Adaptive runs use Bonferroni alpha spending, not SPRT
+Sequential probability ratio tests (as in AgentAssay) are the most sample-efficient way
+to stop early, but they need a modelled alternative hypothesis for every metric. With
+exact small-sample tests already in place, splitting alpha across a few planned looks
+(alpha / K at each) keeps the existing statistics, is conservative by construction, and
+is easy to explain in one line of the report. Early stopping is allowed for a confirmed
+hard regression, or when no adverse effect is present at all; it can lose power but can
+never add false positives. Arms are interleaved one run at a time so drift over time
+affects both sides equally.
+
+## 17. Concurrent scan parsing was measured and rejected
+Bounded-concurrency parsing of session files measured about 3% faster on 40 real
+sessions, within noise: parsing is CPU-bound on one thread. The extra code was not worth
+it. Worker threads are the right tool if scan speed becomes a problem.
+
+## 18. Releases use npm trusted publishing
+Publishing from a laptop needs a passkey each time and an npm login on that machine. A
+release workflow with OpenID Connect publishes without any stored token, adds provenance,
+and refuses a tag that does not match package.json. The one manual step, linking the
+package to the workflow on npmjs.com, is documented in RELEASING.md.

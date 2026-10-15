@@ -87,6 +87,12 @@ we do **not** do.
 | `possible-drift` | Soft differences that may be noise | pass |
 | `no-change` | Nothing beyond normal variation | pass |
 
+**Pay for fewer runs: `--runs auto`.** Instead of a fixed count, the replay looks at the
+data at planned points (5, 7 and 8 runs per side by default) and stops as soon as the
+answer is clear: a confirmed regression, or no sign of any difference. The significance
+level is split across the looks (Bonferroni), so stopping early never adds false
+positives. An obvious regression costs 10 runs instead of 16.
+
 Statistics are exact permutation tests (numeric) and Fisher's exact test (proportions):
 no distribution assumptions, valid at the 3 to 10 runs you can afford. The honest
 consequence: with 3 runs per side the smallest possible p-value is 0.10, so nothing can
@@ -130,7 +136,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           model: claude-opus-5-5
-          runs: 4
+          runs: auto            # stops early when the answer is clear
           check: pnpm test
           max-cost: 10          # hard spending cap for the whole job
 ```

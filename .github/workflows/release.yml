@@ -1,0 +1,42 @@
+name: Release
+
+# Publishes to npm when a GitHub Release is published, using npm trusted publishing
+# (OpenID Connect): no npm token is stored anywhere, and the package gets a signed
+# provenance statement linking it to this repository and workflow run.
+# One-time setup on npmjs.com is described in RELEASING.md.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # lets the job prove its identity to npm; nothing else
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5 or newer; runners can ship an older one.
+      - run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      - name: Refuse to publish a tag that does not match package.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$version" ]; then
+            echo "Release tag $TAG does not match package.json version $version"
+            exit 1
+          fi
+      - run: pnpm check
+      - run: pnpm build
+      - run: npm publish --provenance --access public

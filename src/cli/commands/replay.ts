@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { exitCodeFor } from '../../diff/diff.js';
-import { loadConfig } from '../../config.js';
+import { loadConfig, type Config } from '../../config.js';
 import { renderJson } from '../../report/json.js';
 import { renderMarkdown } from '../../report/markdown.js';
 import { renderTerminal } from '../../report/terminal.js';
@@ -30,7 +30,9 @@ Options
   --name <label>        Name for the candidate arm (default: the model)
   --control-model <id>  Model for the control arm (default: the original session's)
   --no-control          Compare against the original session instead (cheaper, weaker)
-  --runs <n>            Runs per arm (default from config, 3). Use 4+ for significance.
+  --runs <n|auto>       Runs per arm (default from config, 3). Use 4+ for significance.
+                        "auto" stops early once the answer is clear (sequential test).
+  --max-runs <n>        Upper bound for --runs auto (default 8)
   --ref <commit|auto>   Commit to replay on. Default "auto": the last commit on the session's
                         branch before it started, so the agent sees the code it saw then.
   --turns <first|all>   Replay only the first prompt (default) or every human turn, in one
@@ -59,7 +61,7 @@ export function parseOverlays(items: string[] | undefined): Record<string, strin
 export const REPLAY_OPTIONS = {
   model: { type: 'string' }, 'control-model': { type: 'string' }, 'prompt-file': { type: 'string' },
   'mcp-config': { type: 'string' }, overlay: { type: 'string', multiple: true }, name: { type: 'string' },
-  runs: { type: 'string' }, ref: { type: 'string' }, turns: { type: 'string' }, check: { type: 'string' }, 'dry-run': { type: 'boolean' },
+  runs: { type: 'string' }, 'max-runs': { type: 'string' }, ref: { type: 'string' }, turns: { type: 'string' }, check: { type: 'string' }, 'dry-run': { type: 'boolean' },
   'max-cost': { type: 'string' }, yes: { type: 'boolean' }, 'no-control': { type: 'boolean' },
   runner: { type: 'string', default: 'claude' }, scenario: { type: 'string' }, seed: { type: 'string' },
   format: { type: 'string', default: 'terminal' }, 'fail-on': { type: 'string' }, out: { type: 'string' },
@@ -80,6 +82,13 @@ export function variantFromFlags(cwd: string, v: {
     ...(v['mcp-config'] ? { mcpConfig: resolve(cwd, v['mcp-config']) } : {}),
     ...(files ? { files } : {}),
   };
+}
+
+/** Resolve --runs / --max-runs (or config) into a run count and whether it is adaptive. */
+export function resolveRuns(values: { runs?: string | undefined; 'max-runs'?: string | undefined }, config: Config): { runs: number; adaptive: boolean } {
+  const asked = values.runs ?? (config.runs === 'auto' ? 'auto' : undefined);
+  if (asked === 'auto') return { runs: num(values['max-runs'], 'max-runs', 2) ?? config.maxRuns, adaptive: true };
+  return { runs: num(values.runs, 'runs', 1) ?? (config.runs === 'auto' ? config.maxRuns : config.runs), adaptive: false };
 }
 
 export function turnsFlag(value: string | undefined): 'first' | 'all' | undefined {
@@ -105,7 +114,7 @@ export async function replayCommand(ctx: Ctx, argv: string[]): Promise<number> {
   const store = new Store(ctx.cwd, config.storeDir);
   const source = await resolveSourceTrace(ctx, config, store, positionals[0]!);
   const variant = variantFromFlags(ctx.cwd, values);
-  const runs = num(values.runs, 'runs', 1) ?? config.runs;
+  const { runs, adaptive } = resolveRuns(values, config);
   const runner = makeRunner(values.runner, config, values.scenario, num(values.seed, 'seed'), ctx.cwd);
   const fail = failOn(values['fail-on']);
 
@@ -113,6 +122,7 @@ export async function replayCommand(ctx: Ctx, argv: string[]): Promise<number> {
     ctx, config, store, source,
     candidate: { name: variant.name, variant, runs },
     control: !values['no-control'],
+    adaptive,
     ...(values['control-model'] ? { controlVariant: { name: 'control', model: values['control-model'] } } : {}),
     ...(values.ref ? { ref: values.ref } : {}),
     ...(turnsFlag(values.turns) ? { turns: turnsFlag(values.turns)! } : {}),

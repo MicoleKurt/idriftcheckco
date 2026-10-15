@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { alignMilestones } from '../src/diff/milestones.js';
 import { diffGroups } from '../src/diff/diff.js';
-import { renderHtml } from '../src/report/html.js';
+import { MAX_STEPS_SHOWN, renderHtml } from '../src/report/html.js';
 import { VERSION } from '../src/version.js';
 import { FIX_AND_TEST, many } from './helpers.js';
 
@@ -93,5 +93,25 @@ describe('code spans in findings', () => {
     const html = renderHtml(diffGroups(baseline, candidate), { baseline, candidate });
     expect(html).not.toContain('<img>');
     expect(html).toContain('<code>npm run test&lt;img&gt;</code>');
+  });
+});
+
+describe('per-run drill-down', () => {
+  it('lists each run’s steps in order, escaped, with errors marked', () => {
+    const baseline = many(1, { calls: [['Read', 'a.ts'], ['Bash', 'rm <x>', false]] });
+    const candidate = many(1, { calls: [['Edit', 'a.ts']] });
+    const html = renderHtml(diffGroups(baseline, candidate), { baseline, candidate });
+    expect(html).toContain('What this run did (2 steps)');
+    expect(html).toMatch(/<span class="tool">Read<\/span> <span class="mono">a\.ts<\/span>.*<span class="tool">Bash<\/span>/s);
+    expect(html).toContain('rm &lt;x&gt;');
+    expect(html).not.toContain('rm <x>');
+    expect(html).toContain('<li class="err">');
+  });
+  it('caps very long runs with a "+N more" line', () => {
+    const calls = Array.from({ length: MAX_STEPS_SHOWN + 15 }, (_, i) => ['Read', `f${i}.ts`] as [string, string]);
+    const t = many(1, { calls });
+    const html = renderHtml(diffGroups(t, t), { baseline: t, candidate: t });
+    expect(html).toContain('+15 more');
+    expect(html).not.toContain(`f${MAX_STEPS_SHOWN}.ts</span>`);
   });
 });

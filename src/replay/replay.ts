@@ -14,6 +14,8 @@ export interface ReplayOptions {
   repo: string;
   /** Commit-ish the worktree is created from. Default HEAD. */
   ref?: string;
+  /** Number already completed per arm, so ids and stored files continue across rounds. */
+  indexOffset?: number;
   task: string;
   /** Tools the agent may use without asking (same for every arm). */
   allowedTools?: string[];
@@ -88,13 +90,13 @@ export async function runReplay(opts: ReplayOptions): Promise<ReplayResult> {
         const check = opts.check ? await wt.runCheck(opts.check, opts.timeoutMs) : undefined;
         trace = {
           ...trace,
-          id: `${arm.name}-${String(i + 1).padStart(2, '0')}-${trace.id}`,
+          id: `${arm.name}-${String(i + 1 + (opts.indexOffset ?? 0)).padStart(2, '0')}-${trace.id}`,
           filesChanged,
           outcome: { ...trace.outcome, ...(check ? { check } : {}) },
         };
         arms[arm.name]!.push(trace);
         spent += trace.costUsd ?? 0;
-        if (opts.persist) await opts.persist(arm.name, i, trace);
+        if (opts.persist) await opts.persist(arm.name, i + (opts.indexOffset ?? 0), trace);
         done++;
         opts.onProgress?.({ arm: arm.name, index: done, total, trace, spentUsd: spent });
       } finally {

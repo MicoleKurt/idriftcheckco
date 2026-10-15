@@ -1,6 +1,6 @@
 {
   "name": "idriftcheckco",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Regression tests for AI coding agents. Replays the sessions you already have under a new model, prompt or config, and diffs the behavior.",
   "keywords": [
     "ai",
