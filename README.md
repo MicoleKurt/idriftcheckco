@@ -8,6 +8,7 @@ Replays the agent sessions you already have under a changed condition, then diff
 behavior: files touched, checks passed, tool sequence, steps, cost. With variance, not vibes.
 
 [![CI](https://github.com/MicoleKurt/idriftcheckco/actions/workflows/ci.yml/badge.svg)](https://github.com/MicoleKurt/idriftcheckco/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/idriftcheckco.svg)](https://www.npmjs.com/package/idriftcheckco)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-339933)
 
@@ -20,13 +21,10 @@ behavior: files touched, checks passed, tool sequence, steps, cost. With varianc
 ## Try it in three commands
 
 ```bash
-npx github:MicoleKurt/idriftcheckco demo        # ~30 s first run, offline, free: see a real report
-npx github:MicoleKurt/idriftcheckco             # finds YOUR sessions, ranks them for replay
-npx github:MicoleKurt/idriftcheckco replay <session> --model <new-model> --dry-run   # cost first
+npx idriftcheckco demo        # 10 seconds, offline, free: see a real report
+npx idriftcheckco             # finds YOUR sessions, ranks them for replay
+npx idriftcheckco replay <session> --model <new-model> --dry-run   # cost first
 ```
-
-> The npm release is pending; until then, run straight from GitHub as above. Once it is
-> published, `npx idriftcheckco <command>` does the same.
 
 No dataset to write, no config file, no account. It reads sessions you already have.
 Before any paid run, `idriftcheckco doctor` (and every `replay`, automatically) checks
@@ -137,8 +135,8 @@ jobs:
           max-cost: 10          # hard spending cap for the whole job
 ```
 
-Until the npm release, the Action builds itself from its own source (adds about a minute);
-pin `version: 0.1.0` once it is on npm. It is tested end to end on every push by
+Pin `version: 0.1.0` to run the published package; leave it empty to build from the
+action's own source. It is tested end to end on every push by
 [a self-test workflow](.github/workflows/action-selftest.yml) that must catch the demo regression.
 
 The Action replays your committed traces (`.idriftcheckco/traces/`), comments on the PR

@@ -41,7 +41,7 @@ Links in the first comment 👇
 Repo, with the 30-second demo (no API key, nothing to install permanently):
 https://github.com/MicoleKurt/idriftcheckco
 
-Run it: npx github:MicoleKurt/idriftcheckco demo
+Run it: npx idriftcheckco demo
 
 Example report from that demo: https://micolekurt.github.io/idriftcheckco/demo/
 
